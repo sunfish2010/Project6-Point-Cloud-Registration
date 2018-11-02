@@ -71,9 +71,9 @@ namespace {
         glm::vec3 eyePos;    // eye space position used for shading
         glm::vec3 eyeNor;    // eye space normal used for shading, cuz normal will go wrong after perspective transformation
         glm::vec3 col;
-        glm::vec2 texcoord0;
-        TextureData *dev_diffuseTex = NULL;
-        int texWidth, texHeight;
+//        glm::vec2 texcoord0;
+//        TextureData *dev_diffuseTex = NULL;
+//        int texWidth, texHeight;
         // ...
     };
 
@@ -92,9 +92,9 @@ namespace {
 
         glm::vec3 eyePos;    // eye space position used for shading
         glm::vec3 eyeNor;
-        VertexAttributeTexcoord texcoord0;
-        TextureData *dev_diffuseTex;
-        int texWidth, texHeight;
+//        VertexAttributeTexcoord texcoord0;
+//        TextureData *dev_diffuseTex;
+//        int texWidth, texHeight;
         // ...
     };
 
@@ -109,12 +109,12 @@ namespace {
         VertexIndex *dev_indices;
         VertexAttributePosition *dev_position;
         VertexAttributeNormal *dev_normal;
-        VertexAttributeTexcoord *dev_texcoord0;
+//        VertexAttributeTexcoord *dev_texcoord0;
 
         // Materials, add more attributes when needed
-        TextureData *dev_diffuseTex;
-        int diffuseTexWidth;
-        int diffuseTexHeight;
+        //TextureData *dev_diffuseTex;
+        //int diffuseTexWidth;
+        //int diffuseTexHeight;
         // TextureData* dev_specularTex;
         // TextureData* dev_normalTex;
         // ...
@@ -172,33 +172,6 @@ void sendImageToPBO(uchar4 *pbo, int w, int h, glm::vec3 *image) {
     }
 }
 
-__host__ __device__
-
-glm::vec3 getRGBColor(const int idx, const TextureData *texture) {
-    return glm::vec3(texture[idx] / 255.0f, texture[idx + 1] / 255.0f, texture[idx + 2] / 255.0f);
-}
-
-
-__host__ __device__
-
-glm::vec3 textureMapping(const int w, const int h, const glm::vec2 uv, const TextureData *texture) {
-    // bilinear interpolation wikipedia
-    float _x = w * uv.x;
-    float _y = h * uv.y;
-    int x = (int)_x;
-    int y = (int)_y;
-
-    glm::vec3 q00 = getRGBColor(3 * (x + y * w), texture);
-    glm::vec3 q10 = getRGBColor(3 * (x + 1 + y * w), texture);
-    glm::vec3 q01 = getRGBColor(3 * (x + (y + 1) * w), texture);
-    glm::vec3 q11 = getRGBColor(3 * (x + 1 + (y + 1) * w), texture);
-
-    float dx = _x - x;
-    float dy = _y - y;
-
-    return (q00 * (1.f - dx) * (1.f - dy) + q10 * (1.f - dy) * dx + q01 * (1.f - dx) * dy + q11 * dx * dy);
-}
-
 
 /**
 * Writes fragment colors to the framebuffer
@@ -210,42 +183,7 @@ void render(int w, int h, Fragment *fragmentBuffer, glm::vec3 *framebuffer, int 
     int index = x + (y * w);
 
     if (x < w && y < h) {
-
-        // TODO: add your fragment shader code here
-        // texture mapping
-        if (primitive_type == 0) {
-            if (fragmentBuffer[index].dev_diffuseTex != NULL) {
-                glm::vec3 diffuseTexture = textureMapping(fragmentBuffer[index].texWidth, fragmentBuffer[index].texHeight,
-                                                          fragmentBuffer[index].texcoord0,
-                                                          fragmentBuffer[index].dev_diffuseTex);
-                // wikipedia blin phong shading model
-                glm::vec3 lightPos = glm::vec3(50.f);
-                glm::vec3 lightColor = glm::vec3(1.0f);
-                glm::vec3 ambientColor = glm::vec3(0.9f);
-                glm::vec3 specular = glm::vec3(0.9f);
-                float lightPower = 1.2;
-
-                glm::vec3 lightDir = glm::normalize(lightPos - fragmentBuffer[index].eyePos);
-                glm::vec3 eyeDir = glm::normalize(-fragmentBuffer[index].eyePos);
-                float lambertian = imax(glm::dot(fragmentBuffer[index].eyeNor, lightDir), 0);
-
-                specular *= pow(imax(glm::dot(glm::normalize(lightDir + eyeDir), fragmentBuffer[index].eyeNor), 0), 16.0f);
-
-                glm::vec3 color =
-                        ambientColor * 0.1f * lightColor + (diffuseTexture * lambertian + specular) * lightColor * lightPower;
-
-                color = pow(color, glm::vec3(1.f / SCREENGAMMA));
-
-                framebuffer[index] = color;
-            }
-            else {
-                framebuffer[index] = fragmentBuffer[index].color;
-            }
-
-        }
-        else {
-            framebuffer[index] = fragmentBuffer[index].color;
-        }
+        framebuffer[index] = fragmentBuffer[index].color;
     }
 }
 
@@ -480,7 +418,7 @@ void registrationSetBuffers(const tinygltf::Scene &scene) {
                     VertexIndex *dev_indices = NULL;
                     VertexAttributePosition *dev_position = NULL;
                     VertexAttributeNormal *dev_normal = NULL;
-                    VertexAttributeTexcoord *dev_texcoord0 = NULL;
+//                    VertexAttributeTexcoord *dev_texcoord0 = NULL;
 
                     // ----------Indices-------------
 
@@ -622,31 +560,31 @@ void registrationSetBuffers(const tinygltf::Scene &scene) {
 
                     // You can only worry about this part once you started to
                     // implement textures for your rasterizer
-                    TextureData *dev_diffuseTex = NULL;
-                    int diffuseTexWidth = 0;
-                    int diffuseTexHeight = 0;
-                    if (!primitive.material.empty()) {
-                        const tinygltf::Material &mat = scene.materials.at(primitive.material);
-                        printf("material.name = %s\n", mat.name.c_str());
-
-                        if (mat.values.find("diffuse") != mat.values.end()) {
-                            std::string diffuseTexName = mat.values.at("diffuse").string_value;
-                            if (scene.textures.find(diffuseTexName) != scene.textures.end()) {
-                                const tinygltf::Texture &tex = scene.textures.at(diffuseTexName);
-                                if (scene.images.find(tex.source) != scene.images.end()) {
-                                    const tinygltf::Image &image = scene.images.at(tex.source);
-
-                                    size_t s = image.image.size() * sizeof(TextureData);
-                                    cudaMalloc(&dev_diffuseTex, s);
-                                    cudaMemcpy(dev_diffuseTex, &image.image.at(0), s, cudaMemcpyHostToDevice);
-
-                                    diffuseTexWidth = image.width;
-                                    diffuseTexHeight = image.height;
-
-                                    checkCUDAError("Set Texture Image data");
-                                }
-                            }
-                        }
+//                    TextureData *dev_diffuseTex = NULL;
+//                    int diffuseTexWidth = 0;
+//                    int diffuseTexHeight = 0;
+//                    if (!primitive.material.empty()) {
+//                        const tinygltf::Material &mat = scene.materials.at(primitive.material);
+//                        printf("material.name = %s\n", mat.name.c_str());
+//
+//                        if (mat.values.find("diffuse") != mat.values.end()) {
+//                            std::string diffuseTexName = mat.values.at("diffuse").string_value;
+//                            if (scene.textures.find(diffuseTexName) != scene.textures.end()) {
+//                                const tinygltf::Texture &tex = scene.textures.at(diffuseTexName);
+//                                if (scene.images.find(tex.source) != scene.images.end()) {
+//                                    const tinygltf::Image &image = scene.images.at(tex.source);
+//
+//                                    size_t s = image.image.size() * sizeof(TextureData);
+//                                    cudaMalloc(&dev_diffuseTex, s);
+//                                    cudaMemcpy(dev_diffuseTex, &image.image.at(0), s, cudaMemcpyHostToDevice);
+//
+//                                    diffuseTexWidth = image.width;
+//                                    diffuseTexHeight = image.height;
+//
+//                                    checkCUDAError("Set Texture Image data");
+//                                }
+//                            }
+//                        }
 
                         // TODO: write your code for other materails
                         // You may have to take a look at tinygltfloader
@@ -748,18 +686,6 @@ void _vertexTransformAndAssembly(
         primitive.dev_verticesOut[vid].pos = pos;
         primitive.dev_verticesOut[vid].eyePos = glm::vec3(MV * glm::vec4(primitive.dev_position[vid], 1.0f));
         primitive.dev_verticesOut[vid].eyeNor = glm::normalize(MV_normal * primitive.dev_normal[vid]);
-
-        if (primitive.dev_diffuseTex != NULL) {
-            primitive.dev_verticesOut[vid].dev_diffuseTex = primitive.dev_diffuseTex;
-            primitive.dev_verticesOut[vid].texcoord0 = primitive.dev_texcoord0[vid];
-            primitive.dev_verticesOut[vid].texHeight = primitive.diffuseTexHeight;
-            primitive.dev_verticesOut[vid].texWidth = primitive.diffuseTexWidth;
-
-        }
-        else {
-            primitive.dev_verticesOut[vid].dev_diffuseTex = NULL;
-
-        }
     }
 }
 

@@ -1,6 +1,6 @@
 /**
 * @file      main.cpp
-* @brief     Main file for CUDA rasterizer. Handles CUDA-GL interop for display.
+* @brief     Main file for CUDA registrationr. Handles CUDA-GL interop for display.
 * @authors   Skeleton code: Yining Karl Li, Kai Ninomiya, Shuai Shao (Shrek)
 * @date      2012-2016
 * @copyright University of Pennsylvania
@@ -87,13 +87,13 @@ void mainLoop() {
             seconds = seconds2;
         }
 
-        string title = "CIS565 Rasterizer | " + utilityCore::convertIntToString((int) fps) + " FPS" +
+        string title = "CIS565 registrationr | " + utilityCore::convertIntToString((int) fps) + " FPS" +
                        "; Z = " + utilityCore::convertIntToString((int) z_trans);
         glfwSetWindowTitle(window, title.c_str());
 
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
-        glBindTexture(GL_TEXTURE_2D, displayImage);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        //glBindTexture(GL_TEXTURE_2D, displayImage);
+        //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // VAO, shader program, and texture already bound
@@ -125,7 +125,7 @@ void runCuda() {
     glm::mat4 MVP = P * MV;
 
     cudaGLMapBufferObject((void **) &dptr, pbo);
-    rasterize(dptr, MVP, MV, MV_normal, primitive_type);
+    registration(dptr, MVP, MV, MV_normal, primitive_type);
     cudaGLUnmapBufferObject(pbo);
 
     frame++;
@@ -163,7 +163,7 @@ bool init(const tinygltf::Scene &scene) {
 
     // Initialize other stuff
     initVAO();
-    initTextures();
+    //initTextures();
     initCuda();
     initPBO();
 
@@ -190,13 +190,13 @@ bool init(const tinygltf::Scene &scene) {
     }
 
 
-    rasterizeSetBuffers(scene);
+    registrationSetBuffers(scene);
 
     GLuint passthroughProgram;
     passthroughProgram = initShader();
 
     glUseProgram(passthroughProgram);
-    glActiveTexture(GL_TEXTURE0);
+    //glActiveTexture(GL_TEXTURE0);
 
     return true;
 }
@@ -223,20 +223,20 @@ void initCuda() {
     // Use device with highest Gflops/s
     cudaGLSetGLDevice(0);
 
-    rasterizeInit(width, height);
+    registrationInit(width, height);
 
     // Clean up on program exit
     atexit(cleanupCuda);
 }
 
-void initTextures() {
-    glGenTextures(1, &displayImage);
-    glBindTexture(GL_TEXTURE_2D, displayImage);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA,
-                 GL_UNSIGNED_BYTE, NULL);
-}
+//void initTextures() {
+//    glGenTextures(1, &displayImage);
+//    glBindTexture(GL_TEXTURE_2D, displayImage);
+//    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+//    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA,
+//                 GL_UNSIGNED_BYTE, NULL);
+//}
 
 void initVAO(void) {
     GLfloat vertices[] = {
@@ -294,9 +294,9 @@ void cleanupCuda() {
     if (pbo) {
         deletePBO(&pbo);
     }
-    if (displayImage) {
-        deleteTexture(&displayImage);
-    }
+//    if (displayImage) {
+//        deleteTexture(&displayImage);
+//    }
 }
 
 void deletePBO(GLuint *pbo) {
@@ -311,13 +311,13 @@ void deletePBO(GLuint *pbo) {
     }
 }
 
-void deleteTexture(GLuint *tex) {
-    glDeleteTextures(1, tex);
-    *tex = (GLuint) NULL;
-}
+//void deleteTexture(GLuint *tex) {
+//    glDeleteTextures(1, tex);
+//    *tex = (GLuint) NULL;
+//}
 
 void shut_down(int return_code) {
-    rasterizeFree();
+    registrationFree();
     cudaDeviceReset();
 #ifdef __APPLE__
     glfwTerminate();
