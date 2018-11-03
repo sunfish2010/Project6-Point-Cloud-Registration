@@ -1,404 +1,318 @@
 /**
 * @file      main.cpp
-* @brief     Main file for CUDA registrationr. Handles CUDA-GL interop for display.
-* @authors   Skeleton code: Yining Karl Li, Kai Ninomiya, Shuai Shao (Shrek)
-* @date      2012-2016
+* @brief     Example points flocking simulation for CIS 565
+* @authors   Liam Boone, Kai Ninomiya, Kangning (Gary) Li
+* @date      2013-2017
 * @copyright University of Pennsylvania
 */
 
-
-
 #include "main.hpp"
 
-#define STB_IMAGE_IMPLEMENTATION
-#define TINYGLTF_LOADER_IMPLEMENTATION
+// ================
+// Configuration
+// ================
 
-#include <util/tiny_gltf_loader.h>
+#define VISUALIZE 1
+// 0: brute force, 1: gpu 2: kd-tree 3: oct-tree
+#define METHOD 0
 
-//-------------------------------
-//---------RUNTIME STUFF---------
-//-------------------------------
-float scale = 1.0f;
-float x_trans = 0.0f, y_trans = 0.0f, z_trans = -10.0f;
-float x_angle = 0.0f, y_angle = 0.0f;
-int primitive_type = 0;
+const float DT = 0.2f;
 
-//-------------------------------
-//-------------MAIN--------------
-//-------------------------------
+PointCloud points;
 
-
-int main(int argc, char **argv) {
+/**
+* C main function.
+*/
+int main(int argc, char* argv[]) {
+    projectName = "565 CUDA Project 5: Point Cloud Registration, ICP";
     if (argc != 2) {
-        cout << "Usage: [gltf file]. Press Enter to exit" << endl;
+        cout << "Usage: [pc file]. Press Enter to exit" << endl;
         getchar();
         return 0;
     }
 
-    tinygltf::Scene scene;
-    tinygltf::TinyGLTFLoader loader;
-    std::string err;
-    std::string input_filename(argv[1]);
-    std::string ext = getFilePathExtension(input_filename);
+    string input_filename(argv[1]);
+    string ext = getFilePathExtension(input_filename);
 
-    bool ret = false;
-    if (ext.compare("glb") == 0) {
-        // assume binary glTF.
-        ret = loader.LoadBinaryFromFile(&scene, &err, input_filename.c_str());
+    if (ext.compare("txt") == 0) {
+        points = new PointCloud(input_filename);
     } else {
-        // assume ascii glTF.
-        ret = loader.LoadASCIIFromFile(&scene, &err, input_filename.c_str());
-    }
-
-    if (!err.empty()) {
-        printf("Err: %s\n", err.c_str());
-    }
-
-    if (!ret) {
-        printf("Failed to parse glTF\n");
+        printf("Non Supported pc Format\n");
         return -1;
     }
 
-
-    frame = 0;
-    seconds = time(NULL);
-    fpstracker = 0;
-
-    // Launch CUDA/GL
-    if (init(scene)) {
-        // GLFW main loop
+    if (init(argc, argv)) {
         mainLoop();
+        registrationFree();
+        return 0;
+    } else {
+        return 1;
     }
-
-    return 0;
-}
-
-void mainLoop() {
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        runCuda();
-
-        time_t seconds2 = time(NULL);
-
-        if (seconds2 - seconds >= 1) {
-
-            fps = fpstracker / (seconds2 - seconds);
-            fpstracker = 0;
-            seconds = seconds2;
-        }
-
-        string title = "CIS565 registrationr | " + utilityCore::convertIntToString((int) fps) + " FPS" +
-                       "; Z = " + utilityCore::convertIntToString((int) z_trans);
-        glfwSetWindowTitle(window, title.c_str());
-
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
-        //glBindTexture(GL_TEXTURE_2D, displayImage);
-        //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        // VAO, shader program, and texture already bound
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
-        glfwSwapBuffers(window);
-    }
-    glfwDestroyWindow(window);
-    glfwTerminate();
-}
-
-void runCuda() {
-    // Map OpenGL buffer object for writing from CUDA on a single GPU
-    // No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
-    dptr = NULL;
-
-    glm::mat4 P = glm::frustum<float>(-scale * ((float) width) / ((float) height),
-                                      scale * ((float) width / (float) height),
-                                      -scale, scale, 1.0, 1000.0);
-
-    glm::mat4 V = glm::mat4(1.0f);
-
-    glm::mat4 M =
-            glm::translate(glm::vec3(x_trans, y_trans, z_trans))
-            * glm::rotate(x_angle, glm::vec3(1.0f, 0.0f, 0.0f))
-            * glm::rotate(y_angle, glm::vec3(0.0f, 1.0f, 0.0f));
-
-    glm::mat3 MV_normal = glm::transpose(glm::inverse(glm::mat3(V) * glm::mat3(M)));
-    glm::mat4 MV = V * M;
-    glm::mat4 MVP = P * MV;
-
-    cudaGLMapBufferObject((void **) &dptr, pbo);
-    registration(dptr, MVP, MV, MV_normal, primitive_type);
-    cudaGLUnmapBufferObject(pbo);
-
-    frame++;
-    fpstracker++;
-    y_angle += 0.04f;
-
 }
 
 //-------------------------------
-//----------SETUP STUFF----------
+//---------RUNTIME STUFF---------
 //-------------------------------
 
-bool init(const tinygltf::Scene &scene) {
+std::string deviceName;
+GLFWwindow *window;
+
+/**
+* Initialization of CUDA and GLFW.
+*/
+bool init(int argc, char **argv) {
+    // Set window title to "Student Name: [SM 2.0] GPU Name"
+    cudaDeviceProp deviceProp;
+    int gpuDevice = 0;
+    int device_count = 0;
+    cudaGetDeviceCount(&device_count);
+    if (gpuDevice > device_count) {
+        std::cout
+                << "Error: GPU device number is greater than the number of devices!"
+                << " Perhaps a CUDA-capable GPU is not installed?"
+                << std::endl;
+        return false;
+    }
+    cudaGetDeviceProperties(&deviceProp, gpuDevice);
+    int major = deviceProp.major;
+    int minor = deviceProp.minor;
+
+    std::ostringstream ss;
+    ss << projectName << " [SM " << major << "." << minor << " " << deviceProp.name << "]";
+    deviceName = ss.str();
+
+    // Window setup stuff
     glfwSetErrorCallback(errorCallback);
 
     if (!glfwInit()) {
+        std::cout
+                << "Error: Could not initialize GLFW!"
+                << " Perhaps OpenGL 3.3 isn't available?"
+                << std::endl;
         return false;
     }
 
-    width = 800;
-    height = 800;
-    window = glfwCreateWindow(width, height, "CIS 565 Pathtracer", NULL, NULL);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    window = glfwCreateWindow(width, height, deviceName.c_str(), NULL, NULL);
     if (!window) {
         glfwTerminate();
         return false;
     }
     glfwMakeContextCurrent(window);
     glfwSetKeyCallback(window, keyCallback);
+    glfwSetCursorPosCallback(window, mousePositionCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
-    // Set up GL context
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
         return false;
     }
 
-    // Initialize other stuff
+    // Initialize drawing state
     initVAO();
-    //initTextures();
-    initCuda();
-    initPBO();
 
-    // Mouse Control Callbacks
-    glfwSetMouseButtonCallback(window, mouseButtonCallback);
-    glfwSetCursorPosCallback(window, mouseMotionCallback);
-    glfwSetScrollCallback(window, mouseWheelCallback);
+    // Default to device ID 0. If you have more than one GPU and want to test a non-default one,
+    // change the device ID.
+    cudaGLSetGLDevice(0);
 
-    {
-        std::map < std::string, std::vector < std::string > > ::const_iterator
-        it(
-                scene.scenes.begin());
-        std::map < std::string, std::vector < std::string > > ::const_iterator
-        itEnd(
-                scene.scenes.end());
+    cudaGLRegisterBufferObject(pointVBO_positions);
+    cudaGLRegisterBufferObject(pointVBO_velocities);
 
-        for (; it != itEnd; it++) {
-            for (size_t i = 0; i < it->second.size(); i++) {
-                std::cout << it->second[i]
-                          << ((i != (it->second.size() - 1)) ? ", " : "");
-            }
-            std::cout << " ] " << std::endl;
-        }
-    }
+    // Initialize N-body simulation
+    registrationInit(points.getPoints());
 
+    updateCamera();
 
-    registrationSetBuffers(scene);
+    initShaders(program);
 
-    GLuint passthroughProgram;
-    passthroughProgram = initShader();
-
-    glUseProgram(passthroughProgram);
-    //glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_DEPTH_TEST);
 
     return true;
 }
 
-void initPBO() {
-    // set up vertex data parameter
-    int num_texels = width * height;
-    int num_values = num_texels * 4;
-    int size_tex_data = sizeof(GLubyte) * num_values;
+void initVAO() {
 
-    // Generate a buffer ID called a PBO (Pixel Buffer Object)
-    glGenBuffers(1, &pbo);
+    std::unique_ptr<GLfloat[]> bodies{ new GLfloat[4 * (N_FOR_VIS)] };
+    std::unique_ptr<GLuint[]> bindices{ new GLuint[N_FOR_VIS] };
 
-    // Make this the current UNPACK buffer (OpenGL is state-based)
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+    glm::vec4 ul(-1.0, -1.0, 1.0, 1.0);
+    glm::vec4 lr(1.0, 1.0, 0.0, 0.0);
 
-    // Allocate data for the buffer. 4-channel 8-bit image
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, size_tex_data, NULL, GL_DYNAMIC_COPY);
-    cudaGLRegisterBufferObject(pbo);
+    for (int i = 0; i < N_FOR_VIS; i++) {
+        bodies[4 * i + 0] = 0.0f;
+        bodies[4 * i + 1] = 0.0f;
+        bodies[4 * i + 2] = 0.0f;
+        bodies[4 * i + 3] = 1.0f;
+        bindices[i] = i;
+    }
 
-}
 
-void initCuda() {
-    // Use device with highest Gflops/s
-    cudaGLSetGLDevice(0);
+    glGenVertexArrays(1, &pointVAO); // Attach everything needed to draw a particle to this
+    glGenBuffers(1, &pointVBO_positions);
+    glGenBuffers(1, &pointVBO_velocities);
+    glGenBuffers(1, &pointIBO);
 
-    registrationInit(width, height);
+    glBindVertexArray(pointVAO);
 
-    // Clean up on program exit
-    atexit(cleanupCuda);
-}
+    // Bind the positions array to the pointVAO by way of the pointVBO_positions
+    glBindBuffer(GL_ARRAY_BUFFER, pointVBO_positions); // bind the buffer
+    glBufferData(GL_ARRAY_BUFFER, 4 * (N_FOR_VIS) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW); // transfer data
 
-//void initTextures() {
-//    glGenTextures(1, &displayImage);
-//    glBindTexture(GL_TEXTURE_2D, displayImage);
-//    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-//    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA,
-//                 GL_UNSIGNED_BYTE, NULL);
-//}
-
-void initVAO(void) {
-    GLfloat vertices[] = {
-            -1.0f, -1.0f,
-            1.0f, -1.0f,
-            1.0f, 1.0f,
-            -1.0f, 1.0f,
-    };
-
-    GLfloat texcoords[] = {
-            1.0f, 1.0f,
-            0.0f, 1.0f,
-            0.0f, 0.0f,
-            1.0f, 0.0f
-    };
-
-    GLushort indices[] = {0, 1, 3, 3, 1, 2};
-
-    GLuint vertexBufferObjID[3];
-    glGenBuffers(3, vertexBufferObjID);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObjID[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint) positionLocation, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(positionLocation);
+    glVertexAttribPointer((GLuint)positionLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObjID[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(texcoords), texcoords, GL_STATIC_DRAW);
-    glVertexAttribPointer((GLuint) texcoordsLocation, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(texcoordsLocation);
+    // Bind the velocities array to the pointVAO by way of the pointVBO_velocities
+    glBindBuffer(GL_ARRAY_BUFFER, pointVBO_velocities);
+    glBufferData(GL_ARRAY_BUFFER, 4 * (N_FOR_VIS) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(velocitiesLocation);
+    glVertexAttribPointer((GLuint)velocitiesLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertexBufferObjID[2]);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (N_FOR_VIS) * sizeof(GLuint), bindices.get(), GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
 }
 
-
-GLuint initShader() {
-    const char *attribLocations[] = {"Position", "Tex"};
-    GLuint program = glslUtility::createDefaultProgram(attribLocations, 2);
+void initShaders(GLuint * program) {
     GLint location;
 
-    glUseProgram(program);
-    if ((location = glGetUniformLocation(program, "u_image")) != -1) {
-        glUniform1i(location, 0);
+    program[PROG_POINT] = glslUtility::createProgram(
+            "shaders/point.vert.glsl",
+            "shaders/point.geom.glsl",
+            "shaders/point.frag.glsl", attributeLocations, 2);
+    glUseProgram(program[PROG_POINT]);
+
+    if ((location = glGetUniformLocation(program[PROG_POINT], "u_projMatrix")) != -1) {
+        glUniformMatrix4fv(location, 1, GL_FALSE, &projection[0][0]);
     }
-
-    return program;
-}
-
-//-------------------------------
-//---------CLEANUP STUFF---------
-//-------------------------------
-
-void cleanupCuda() {
-    if (pbo) {
-        deletePBO(&pbo);
-    }
-//    if (displayImage) {
-//        deleteTexture(&displayImage);
-//    }
-}
-
-void deletePBO(GLuint *pbo) {
-    if (pbo) {
-        // unregister this buffer object with CUDA
-        cudaGLUnregisterBufferObject(*pbo);
-
-        glBindBuffer(GL_ARRAY_BUFFER, *pbo);
-        glDeleteBuffers(1, pbo);
-
-        *pbo = (GLuint) NULL;
+    if ((location = glGetUniformLocation(program[PROG_POINT], "u_cameraPos")) != -1) {
+        glUniform3fv(location, 1, &cameraPosition[0]);
     }
 }
 
-//void deleteTexture(GLuint *tex) {
-//    glDeleteTextures(1, tex);
-//    *tex = (GLuint) NULL;
-//}
+//====================================
+// Main loop
+//====================================
+void runCUDA() {
+    // Map OpenGL buffer object for writing from CUDA on a single GPU
+    // No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not
+    // use this buffer
 
-void shut_down(int return_code) {
-    registrationFree();
-    cudaDeviceReset();
-#ifdef __APPLE__
-    glfwTerminate();
+    float4 *dptr = NULL;
+    float *dptrVertPositions = NULL;
+    float *dptrVertVelocities = NULL;
+
+    cudaGLMapBufferObject((void**)&dptrVertPositions, pointVBO_positions);
+    cudaGLMapBufferObject((void**)&dptrVertVelocities, pointVBO_velocities);
+
+    // execute the kernel
+
+
+#if VISUALIZE
+    points::copyPointsToVBO(dptrVertPositions, dptrVertVelocities);
 #endif
-    exit(return_code);
+    // unmap buffer object
+    cudaGLUnmapBufferObject(pointVBO_positions);
+    cudaGLUnmapBufferObject(pointVBO_velocities);
 }
 
-//------------------------------
-//-------GLFW CALLBACKS---------
-//------------------------------
+void mainLoop() {
+    double fps = 0;
+    double timebase = 0;
+    int frame = 0;
 
-void errorCallback(int error, const char *description) {
-    fputs(description, stderr);
-}
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
 
-void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, GL_TRUE);
-    } else if (key == GLFW_KEY_N && action == GLFW_RELEASE) {
-        primitive_type++;
-        if (primitive_type > 2) primitive_type = 0;
-    }
-}
+        frame++;
+        double time = glfwGetTime();
 
-//----------------------------
-//----- util -----------------
-//----------------------------
-static std::string getFilePathExtension(const std::string &FileName) {
-    if (FileName.find_last_of(".") != std::string::npos)
-        return FileName.substr(FileName.find_last_of(".") + 1);
-    return "";
-}
-
-
-
-//-----------------------------
-//---- Mouse control ----------
-//-----------------------------
-
-enum ControlState {
-    NONE = 0, ROTATE, TRANSLATE
-};
-ControlState mouseState = NONE;
-
-void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods) {
-    if (action == GLFW_PRESS) {
-        if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            mouseState = ROTATE;
-        } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-            mouseState = TRANSLATE;
+        if (time - timebase > 1.0) {
+            fps = frame / (time - timebase);
+            timebase = time;
+            frame = 0;
         }
 
-    } else if (action == GLFW_RELEASE) {
-        mouseState = NONE;
+        runCUDA();
+
+        std::ostringstream ss;
+        ss << "[";
+        ss.precision(1);
+        ss << std::fixed << fps;
+        ss << " fps] " << deviceName;
+        glfwSetWindowTitle(window, ss.str().c_str());
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+#if VISUALIZE
+        glUseProgram(program[PROG_POINT]);
+        glBindVertexArray(pointVAO);
+        glPointSize((GLfloat)pointSize);
+        glDrawElements(GL_POINTS, N_FOR_VIS + 1, GL_UNSIGNED_INT, 0);
+        glPointSize(1.0f);
+
+        glUseProgram(0);
+        glBindVertexArray(0);
+
+        glfwSwapBuffers(window);
+#endif
+    }
+    glfwDestroyWindow(window);
+    glfwTerminate();
+}
+
+
+void errorCallback(int error, const char *description) {
+    fprintf(stderr, "error %d: %s\n", error, description);
+}
+
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, GL_TRUE);
     }
 }
 
-double lastx = (double) width / 2;
-double lasty = (double) height / 2;
-
-void mouseMotionCallback(GLFWwindow *window, double xpos, double ypos) {
-    const double s_r = 0.01;
-    const double s_t = 0.01;
-
-    double diffx = xpos - lastx;
-    double diffy = ypos - lasty;
-    lastx = xpos;
-    lasty = ypos;
-
-    if (mouseState == ROTATE) {
-        //rotate
-        x_angle += (float) s_r * diffy;
-        y_angle += (float) s_r * diffx;
-    } else if (mouseState == TRANSLATE) {
-        //translate
-        x_trans += (float) (s_t * diffx);
-        y_trans += (float) (-s_t * diffy);
-    }
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    leftMousePressed = (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS);
+    rightMousePressed = (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS);
 }
 
-void mouseWheelCallback(GLFWwindow *window, double xoffset, double yoffset) {
-    const double s = 1.0;    // sensitivity
-    z_trans += (float) (s * yoffset);
+void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
+    if (leftMousePressed) {
+        // compute new camera parameters
+        phi += (xpos - lastX) / width;
+        theta -= (ypos - lastY) / height;
+        theta = std::fmax(0.01f, std::fmin(theta, 3.14f));
+        updateCamera();
+    }
+    else if (rightMousePressed) {
+        zoom += (ypos - lastY) / height;
+        zoom = std::fmax(0.1f, std::fmin(zoom, 5.0f));
+        updateCamera();
+    }
+
+    lastX = xpos;
+    lastY = ypos;
+}
+
+void updateCamera() {
+    cameraPosition.x = zoom * sin(phi) * sin(theta);
+    cameraPosition.z = zoom * cos(theta);
+    cameraPosition.y = zoom * cos(phi) * sin(theta);
+    cameraPosition += lookAt;
+
+    projection = glm::perspective(fovy, float(width) / float(height), zNear, zFar);
+    glm::mat4 view = glm::lookAt(cameraPosition, lookAt, glm::vec3(0, 0, 1));
+    projection = projection * view;
+
+    GLint location;
+
+    glUseProgram(program[PROG_POINT]);
+    if ((location = glGetUniformLocation(program[PROG_POINT], "u_projMatrix")) != -1) {
+        glUniformMatrix4fv(location, 1, GL_FALSE, &projection[0][0]);
+    }
 }

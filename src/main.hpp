@@ -1,10 +1,4 @@
-/**
- * @file      main.hpp
- * @brief     Main file for CUDA rasterizer. Handles CUDA-GL interop for display.
- * @authors   Skeleton code: Yining Karl Li, Kai Ninomiya, Shuai Shao (Shrek)
- * @date      2012-2016
- * @copyright University of Pennsylvania
- */
+// modified from Project 0
 
 #pragma once
 
@@ -24,81 +18,69 @@
 #include <util/utilityCore.hpp>
 
 #include "registration.h"
+#include "pointcloud.h"
 
 using namespace std;
 
-//-------------------------------
-//------------GL STUFF-----------
-//-------------------------------
-int frame;
-int fpstracker;
-double seconds;
-int fps = 0;
-GLuint positionLocation = 0;
-GLuint texcoordsLocation = 1;
-const char *attributeLocations[] = { "Position", "Tex" };
-GLuint pbo = (GLuint)NULL;
+//====================================
+// GL Stuff
+//====================================
+
+GLuint positionLocation = 0;   // Match results from glslUtility::createProgram.
+GLuint velocitiesLocation = 1; // Also see attribtueLocations below.
+const char *attributeLocations[] = { "Position", "Velocity" };
+
+GLuint pointVAO = 0;
+GLuint pointVBO_positions = 0;
+GLuint pointVBO_velocities = 0;
+GLuint pointIBO = 0;
 GLuint displayImage;
-uchar4 *dptr;
+GLuint program[2];
 
-GLFWwindow *window;
+const unsigned int PROG_POINT = 0;
 
-//-------------------------------
-//----------CUDA STUFF-----------
-//-------------------------------
+const float fovy = (float) (PI / 4);
+const float zNear = 0.10f;
+const float zFar = 10.0f;
+int width = 1280;
+int height = 720;
+int pointSize = 2;
 
-int width = 800;
-int height = 800;
+// For camera controls
+bool leftMousePressed = false;
+bool rightMousePressed = false;
+double lastX;
+double lastY;
+float theta = 1.22f;
+float phi = -0.70f;
+float zoom = 4.0f;
+glm::vec3 lookAt = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 cameraPosition;
 
-//-------------------------------
-//-------------MAIN--------------
-//-------------------------------
+glm::mat4 projection;
 
-int main(int argc, char **argv);
+//====================================
+// Main
+//====================================
 
-//-------------------------------
-//---------RUNTIME STUFF---------
-//-------------------------------
+const char *projectName;
 
-void runCuda();
+int main(int argc, char* argv[]);
 
-#ifdef __APPLE__
-void display();
-#else
-void display();
-void keyboard(unsigned char key, int x, int y);
-#endif
-
-//-------------------------------
-//----------SETUP STUFF----------
-//-------------------------------
-bool init(const tinygltf::Scene & scene);
-void initPBO();
-void initCuda();
-void initTextures();
-void initVAO();
-GLuint initShader();
-
-//-------------------------------
-//---------CLEANUP STUFF---------
-//-------------------------------
-
-void cleanupCuda();
-void deletePBO(GLuint *pbo);
-void deleteTexture(GLuint *tex);
-
-//------------------------------
-//-------GLFW CALLBACKS---------
-//------------------------------
+//====================================
+// Main loop
+//====================================
 void mainLoop();
 void errorCallback(int error, const char *description);
-void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
-
-//----------------------------
-//----- util -----------------
-//----------------------------
-std::string getFilePathExtension(const std::string &FileName);
-
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-void mouseMotionCallback(GLFWwindow* window, double xpos, double ypos);
-void mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset);
+void mousePositionCallback(GLFWwindow* window, double xpos, double ypos);
+void updateCamera();
+void runCUDA();
+
+//====================================
+// Setup/init Stuff
+//====================================
+bool init(int argc, char **argv);
+void initVAO();
+void initShaders(GLuint *program);
