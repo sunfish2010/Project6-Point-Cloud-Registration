@@ -7,14 +7,20 @@
 #include <vector>
 #include <string>
 #include <glm/glm.hpp>
-
+#include <fstream>
+#include <util/utilityCore.hpp>
 
 class PointCloud{
 public:
     PointCloud(std::string filename);
+	PointCloud();
+	~PointCloud();
     std::vector<glm::vec4> getPoints();
+	int getNumPoints();
 
 private:
     // x y z color
     std::vector<glm::vec4> points;
+	int numPoints;
+	std::ifstream fp_in;
 };

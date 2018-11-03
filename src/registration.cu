@@ -96,25 +96,25 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
     kernCopyPositionsToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_pos_fixed, vbodptr_positions, scene_scale);
     kernCopyVelocitiesToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_vel1, vbodptr_velocities, scene_scale);
 
-    checkCUDAErrorWithLine("copyBoidsToVBO failed!");
+    checkCUDAError("copyBoidsToVBO failed!");
 
     cudaDeviceSynchronize();
 }
 
 
-__global__ void kernInitializePosArray(const vector<glm::vec4>& pts, int N, glm::vec3 *pos, float scale){
-    int index = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (index < N){
-        arr[index].x = pts[index].x * scale;
-        arr[index].y = pts[index].y * scale;
-        arr[index].z = pts[index].z * scale;
-    }
-}
+// __global__ void kernInitializePosArray(const std::vector<glm::vec4>& pts, int N, glm::vec3 *pos, float scale){
+//     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+//     if (index < N){
+//         pos[index].x = pts[index].x * scale;
+//         pos[index].y = pts[index].y * scale;
+//         pos[index].z = pts[index].z * scale;
+//     }
+// }
 
 /**
 * Called once at the beginning of the program to allocate memory.
 */
-void registrationInit(const vector<glm::vec4>& pts) {
+void registrationInit(const std::vector<glm::vec4>& pts) {
     numObjects = (int)pts.size();
     dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
     cudaMalloc((void**) &dev_pos_fixed, numObjects * sizeof(glm::vec3));
@@ -123,7 +123,8 @@ void registrationInit(const vector<glm::vec4>& pts) {
     cudaMalloc((void**) &dev_vel2, numObjects * sizeof(glm::vec3));
     checkCUDAError("registration Init");
 
-    kernInitializePosArray <<<fullBlocksPerGrid, blockSize>>> (pts, numObjects, dev_pos_fixed, scene_scale);
+	cudaMemcpy(dev_pos_fixed, &pts[0], pts.size() * sizeof(glm::vec4), cudaMemcpyHostToDevice);
+    //kernInitializePosArray <<<fullBlocksPerGrid, blockSize>>> (pts, numObjects, dev_pos_fixed, scene_scale);
 }
 //
 ///**

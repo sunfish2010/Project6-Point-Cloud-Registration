@@ -116,6 +116,12 @@ std::istream &utilityCore::safeGetline(std::istream &is, std::string &t) {
 
     return is;
 }
+
+std::string  utilityCore::getFilePathExtension(const std::string &FileName) {
+    if (FileName.find_last_of(".") != std::string::npos)
+        return FileName.substr(FileName.find_last_of(".") + 1);
+    return "";
+}
 //-----------------------------
 //-------GLM Printers----------
 //-----------------------------

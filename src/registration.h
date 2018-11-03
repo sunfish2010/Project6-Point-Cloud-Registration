@@ -11,9 +11,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
+#include <vector>
 
 void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities);
 
-void registrationInit(const vector<glm::vec4>& pts);
+void registrationInit(const std:: vector<glm::vec4>& pts);
 void registration(int method);
 void registrationFree();

@@ -190,4 +190,20 @@ GLuint createProgram(const char *vertexShaderPath, const char *fragmentShaderPat
 
     return program;
 }
+
+GLuint createProgram(const char *vertexShaderPath, const char *geometryShaderPath,
+                    const char *fragmentShaderPath,const char *attributeLocations[], GLuint numberOfLocations) {
+    glslUtility::shaders_t shaders = glslUtility::loadShaders(vertexShaderPath, geometryShaderPath, fragmentShaderPath);
+
+    GLuint program = glCreateProgram();
+
+    for (GLuint i = 0; i < numberOfLocations; ++i) {
+        glBindAttribLocation(program, i, attributeLocations[i]);
+    }
+
+    glslUtility::attachAndLinkProgram(program, shaders);
+
+    return program;
+}
+
 }

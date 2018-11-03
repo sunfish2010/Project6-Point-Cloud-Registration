@@ -16,6 +16,7 @@
 #include <glm/glm.hpp>
 #include <util/glslUtility.hpp>
 #include <util/utilityCore.hpp>
+#include <memory>
 
 #include "registration.h"
 #include "pointcloud.h"

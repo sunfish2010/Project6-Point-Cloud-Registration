@@ -13,6 +13,9 @@ GLuint createDefaultProgram(const char *attributeLocations[], GLuint numberOfLoc
 GLuint createProgram(const char *attributeLocations[], GLuint numberOfLocations,
                      const char *vertexShaderPath, const char *fragmentShaderPath,
                      const char *geometryShaderPath = 0);
+
+GLuint createProgram(const char *vertexShaderPath, const char *geometryShaderPath,
+                    const char *fragmentShaderPath,const char *attributeLocations[], GLuint numberOfLocations);
 }
 
 #endif

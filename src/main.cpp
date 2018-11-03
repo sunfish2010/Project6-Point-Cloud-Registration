@@ -18,7 +18,9 @@
 
 const float DT = 0.2f;
 
-PointCloud points;
+PointCloud* pointcloud;
+
+static int N;
 
 /**
 * C main function.
@@ -32,10 +34,11 @@ int main(int argc, char* argv[]) {
     }
 
     string input_filename(argv[1]);
-    string ext = getFilePathExtension(input_filename);
+    string ext = utilityCore::getFilePathExtension(input_filename);
 
     if (ext.compare("txt") == 0) {
-        points = new PointCloud(input_filename);
+        pointcloud = new PointCloud(input_filename);
+		N = pointcloud->getNumPoints();
     } else {
         printf("Non Supported pc Format\n");
         return -1;
@@ -123,7 +126,7 @@ bool init(int argc, char **argv) {
     cudaGLRegisterBufferObject(pointVBO_velocities);
 
     // Initialize N-body simulation
-    registrationInit(points.getPoints());
+    registrationInit(pointcloud->getPoints());
 
     updateCamera();
 
@@ -135,14 +138,13 @@ bool init(int argc, char **argv) {
 }
 
 void initVAO() {
-
-    std::unique_ptr<GLfloat[]> bodies{ new GLfloat[4 * (N_FOR_VIS)] };
-    std::unique_ptr<GLuint[]> bindices{ new GLuint[N_FOR_VIS] };
+    std::unique_ptr<GLfloat[]> bodies{ new GLfloat[4 * (N)] };
+    std::unique_ptr<GLuint[]> bindices{ new GLuint[N] };
 
     glm::vec4 ul(-1.0, -1.0, 1.0, 1.0);
     glm::vec4 lr(1.0, 1.0, 0.0, 0.0);
 
-    for (int i = 0; i < N_FOR_VIS; i++) {
+    for (int i = 0; i < N; i++) {
         bodies[4 * i + 0] = 0.0f;
         bodies[4 * i + 1] = 0.0f;
         bodies[4 * i + 2] = 0.0f;
@@ -160,19 +162,19 @@ void initVAO() {
 
     // Bind the positions array to the pointVAO by way of the pointVBO_positions
     glBindBuffer(GL_ARRAY_BUFFER, pointVBO_positions); // bind the buffer
-    glBufferData(GL_ARRAY_BUFFER, 4 * (N_FOR_VIS) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW); // transfer data
+    glBufferData(GL_ARRAY_BUFFER, 4 * (N) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW); // transfer data
 
     glEnableVertexAttribArray(positionLocation);
     glVertexAttribPointer((GLuint)positionLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
     // Bind the velocities array to the pointVAO by way of the pointVBO_velocities
     glBindBuffer(GL_ARRAY_BUFFER, pointVBO_velocities);
-    glBufferData(GL_ARRAY_BUFFER, 4 * (N_FOR_VIS) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 4 * (N) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(velocitiesLocation);
     glVertexAttribPointer((GLuint)velocitiesLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointIBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (N_FOR_VIS) * sizeof(GLuint), bindices.get(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (N) * sizeof(GLuint), bindices.get(), GL_STATIC_DRAW);
 
     glBindVertexArray(0);
 }
@@ -213,7 +215,7 @@ void runCUDA() {
 
 
 #if VISUALIZE
-    points::copyPointsToVBO(dptrVertPositions, dptrVertVelocities);
+    copyPointsToVBO(dptrVertPositions, dptrVertVelocities);
 #endif
     // unmap buffer object
     cudaGLUnmapBufferObject(pointVBO_positions);
@@ -252,7 +254,7 @@ void mainLoop() {
         glUseProgram(program[PROG_POINT]);
         glBindVertexArray(pointVAO);
         glPointSize((GLfloat)pointSize);
-        glDrawElements(GL_POINTS, N_FOR_VIS + 1, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_POINTS, N + 1, GL_UNSIGNED_INT, 0);
         glPointSize(1.0f);
 
         glUseProgram(0);
