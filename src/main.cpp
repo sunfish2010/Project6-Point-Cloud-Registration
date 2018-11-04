@@ -163,14 +163,14 @@ void initVAO() {
 
     // Bind the positions array to the pointVAO by way of the pointVBO_positions
     glBindBuffer(GL_ARRAY_BUFFER, pointVBO_positions); // bind the buffer
-    glBufferData(GL_ARRAY_BUFFER, 4 * (N) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW); // transfer data
+    glBufferData(GL_ARRAY_BUFFER, 4 * (2 * N) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW); // transfer data
 
     glEnableVertexAttribArray(positionLocation);
     glVertexAttribPointer((GLuint)positionLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
     // Bind the velocities array to the pointVAO by way of the pointVBO_velocities
     glBindBuffer(GL_ARRAY_BUFFER, pointVBO_velocities);
-    glBufferData(GL_ARRAY_BUFFER, 4 * (N) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 4 * (2 * N) * sizeof(GLfloat), bodies.get(), GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(velocitiesLocation);
     glVertexAttribPointer((GLuint)velocitiesLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 

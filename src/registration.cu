@@ -29,7 +29,7 @@
 #endif
 
 #define blockSize 128
-#define scene_scale 1.0f
+#define scene_scale 100.0f
 #define threadsPerBlock(blockSize)
 
 template<typename T>
@@ -45,10 +45,8 @@ static int numObjects;
 
 static glm::vec4 *dev_pos_fixed = NULL;
 static glm::vec4 *dev_pos_rotated = NULL;
-static glm::vec3 *dev_vel2;
-static glm::vec3 *dev_vel1;
 
-static cudaEvent_t start, stop;
+//static cudaEvent_t start, stop;
 /**
 * Kernel that writes the image to the OpenGL PBO directly.
 */
@@ -59,31 +57,27 @@ static cudaEvent_t start, stop;
 /**
 * Copy the boid positions into the VBO so that they can be drawn by OpenGL.
 */
-__global__ void kernCopyPositionsToVBO(int N, glm::vec4 *pos, float *vbo, float s_scale) {
+__global__ void kernCopyPositionsToVBO(int N, int offset, glm::vec4 *pos, float *vbo) {
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
 
-    float c_scale = -1.0f / s_scale;
+    float c_scale = -1.0f / scene_scale;
 
     if (index < N) {
-        vbo[4 * index + 0] = pos[index].x * c_scale;
-        vbo[4 * index + 1] = pos[index].y * c_scale;
-        vbo[4 * index + 2] = pos[index].z * c_scale;
-        vbo[4 * index + 3] = 1.0f;
+        vbo[4 * (index + offset) + 0] = pos[index].x * c_scale;
+        vbo[4 * (index + offset) + 1] = pos[index].y * c_scale;
+        vbo[4 * (index + offset) + 2] = pos[index].z * c_scale;
+        vbo[4 * (index + offset) + 3] = 1.0f;
     }
 }
 
-__global__ void kernCopyVelocitiesToVBO(int N, glm::vec3 *vel, float *vbo, float s_scale) {
+__global__ void kernCopyColorsToVBO(int N, int offset, glm::vec3 color, float *vbo) {
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
 
     if (index < N) {
-//        vbo[4 * index + 0] = vel[index].x + 0.3f;
-//        vbo[4 * index + 1] = vel[index].y + 0.3f;
-//        vbo[4 * index + 2] = vel[index].z + 0.3f;
-//        vbo[4 * index + 3] = 1.0f;
-        vbo[4 * index + 0] = 0.3f;
-        vbo[4 * index + 1] = 0.9f;
-        vbo[4 * index + 2] = 0.3f;
-        vbo[4 * index + 3] = 1.0f;
+        vbo[4 * (index + offset) + 0] = color.x
+        vbo[4 * (index + offset) + 1] = color.y
+        vbo[4 * (index + offset) + 2] = color.z
+        vbo[4 * (index + offset) + 3] = 1.0f;
     }
 }
 
@@ -93,24 +87,52 @@ __global__ void kernCopyVelocitiesToVBO(int N, glm::vec3 *vel, float *vbo, float
 void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
     dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
 
-    kernCopyPositionsToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_pos_fixed, vbodptr_positions, scene_scale);
-	checkCUDAError("copyPositions failed!");
-	kernCopyVelocitiesToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_vel1, vbodptr_velocities, scene_scale);
+    kernCopyPositionsToVBO <<<fullBlocksPerGrid, blockSize >>>(numObjects, 0, dev_pos_fixed, vbodptr_positions);
+	checkCUDAError("copyPositionsFixed failed!");
 
-    checkCUDAError("copyVelocities failed!");
+	kernCopyColorsToVBO <<<fullBlocksPerGrid, blockSize >>>(numObjects, 0, glm::vec3(1.0f, 1.0f, 1.0f),
+	        vbodptr_velocities);
+    checkCUDAError("copyColorsFixed failed!");
+
+	kernCopyPositionsToVBO <<< fullBlocksPerGrid, blockSize >>>(numObjects, numObjects,
+	        dev_pos_rotated, vbodptr_positions);
+    checkCUDAError("copyPositionsRotated failed!");
+
+    kernCopyColorsToVBO <<< fullBlocksPerGrid, blockSize >>>(numObjects, numObjects, glm::vec3(0.3f, 0.9f, 0.3f),
+            vbodptr_velocities);
+    checkCUDAError("copyColorsRotated failed!");
+
 
     cudaDeviceSynchronize();
 }
 
 
-// __global__ void kernInitializePosArray(const std::vector<glm::vec4>& pts, int N, glm::vec3 *pos, float scale){
-//     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
-//     if (index < N){
-//         pos[index].x = pts[index].x * scale;
-//         pos[index].y = pts[index].y * scale;
-//         pos[index].z = pts[index].z * scale;
-//     }
-// }
+ __global__ void kernInitializePosArray(int N, glm::vec3 *pos, float scale){
+     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+     if (index < N){
+         pos[index].x *= scale;
+         pos[index].y *= scale;
+         pos[index].z *= scale;
+     }
+ }
+
+
+ __global__ void kernInitializePosArrayRotated(int N, glm::vec4 *pos_in, glm::vec4 *pos_out, glm::mat4 transformation){
+    int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (index < N){
+        pos_in[index] = transformation * pos_in[index];
+    }
+}
+
+
+void glm::mat4 constructTransformationMatrix(const glm::vec3 &translation,const glm::vec3& rotation,const glm::vec3& scale){
+    glm::mat4 translation = glm::translate(glm::mat4(), translation);
+    glm::mat4 rotation = glm::rotate(glm::mat4(), rotation.x, glm::vec3(1, 0, 0));
+    rotation *= glm::rotate(glm::mat4(), rotation.y, glm::vec3(0, 1, 0));
+    rotation *= glm::rotate(glm::mat4(), rotation.z, glm::vec3(0, 0, 1));
+    glm::mat4 scale = glm::scale(glm::mat4(), scale);
+    return translation * rotation * scale;
+}
 
 /**
 * Called once at the beginning of the program to allocate memory.
@@ -120,14 +142,19 @@ void registrationInit(const std::vector<glm::vec4>& pts) {
     dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
     cudaMalloc((void**) &dev_pos_fixed, numObjects * sizeof(glm::vec4));
     cudaMalloc((void**) &dev_pos_rotated, numObjects * sizeof(glm::vec4));
-    cudaMalloc((void**) &dev_vel1, numObjects * sizeof(glm::vec3));
-    cudaMalloc((void**) &dev_vel2, numObjects * sizeof(glm::vec3));
+
     checkCUDAError("registration Init");
 
 	cudaMemcpy(dev_pos_fixed, &pts[0], numObjects * sizeof(glm::vec4), cudaMemcpyHostToDevice);
 	checkCUDAError("pos_fixed Memcpy");
 
-    //kernInitializePosArray <<<fullBlocksPerGrid, blockSize>>> (pts, numObjects, dev_pos_fixed, scene_scale);
+    kernInitializePosArray <<<fullBlocksPerGrid, blockSize>>> (numObjects, dev_pos_fixed, scene_scale);
+
+    glm::mat4 transformation = constructTransformationMatrix(glm::vec3(5.0f, 0.0f, 0.0f),
+            glm::vec3(0.4f, 0.6f, -0.2f), glm::vec3(1.0f, 1.0f, 1.0f));
+
+    kernInitializePosArrayRotated <<<fullBlocksPerGrid, blockSize>>> (numObjects, dev_pos_fixed,
+            dev_pos_rotated, transformation);
 }
 //
 ///**
@@ -184,13 +211,9 @@ void registrationFree() {
 
     cudaFree(dev_pos_rotated);
     cudaFree(dev_pos_fixed);
-    cudaFree(dev_vel2);
-    cudaFree(dev_vel1);
 
     dev_pos_fixed = NULL;
     dev_pos_rotated = NULL;
-    dev_vel1 = NULL;
-    dev_vel2 = NULL;
 
     checkCUDAError("registration Free");
 }
