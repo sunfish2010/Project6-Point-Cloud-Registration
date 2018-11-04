@@ -14,7 +14,7 @@
 #include <vector>
 
 void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities);
-
+glm::mat4 constructTransformationMatrix(const glm::vec3 &translation, const glm::vec3& rotation, const glm::vec3& scale);
 void registrationInit(const std:: vector<glm::vec4>& pts);
 void registration(int method);
 void registrationFree();

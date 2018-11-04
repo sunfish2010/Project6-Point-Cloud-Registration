@@ -139,13 +139,13 @@ bool init(int argc, char **argv) {
 }
 
 void initVAO() {
-    std::unique_ptr<GLfloat[]> bodies{ new GLfloat[4 * (N)] };
-    std::unique_ptr<GLuint[]> bindices{ new GLuint[N] };
+    std::unique_ptr<GLfloat[]> bodies{ new GLfloat[4 * (2 * N)] };
+    std::unique_ptr<GLuint[]> bindices{ new GLuint[2 * N] };
 
     glm::vec4 ul(-1.0, -1.0, 1.0, 1.0);
     glm::vec4 lr(1.0, 1.0, 0.0, 0.0);
 
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < 2 * N; i++) {
         bodies[4 * i + 0] = 0.0f;
         bodies[4 * i + 1] = 0.0f;
         bodies[4 * i + 2] = 0.0f;
@@ -175,7 +175,7 @@ void initVAO() {
     glVertexAttribPointer((GLuint)velocitiesLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pointIBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (N) * sizeof(GLuint), bindices.get(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (2 * N) * sizeof(GLuint), bindices.get(), GL_STATIC_DRAW);
 
     glBindVertexArray(0);
 }
@@ -255,7 +255,7 @@ void mainLoop() {
         glUseProgram(program[PROG_POINT]);
         glBindVertexArray(pointVAO);
         glPointSize((GLfloat)pointSize);
-        glDrawElements(GL_POINTS, N + 1, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_POINTS, 2 * N + 1, GL_UNSIGNED_INT, 0);
         glPointSize(1.0f);
 
         glUseProgram(0);

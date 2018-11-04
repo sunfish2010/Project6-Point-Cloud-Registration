@@ -74,9 +74,9 @@ __global__ void kernCopyColorsToVBO(int N, int offset, glm::vec3 color, float *v
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
 
     if (index < N) {
-        vbo[4 * (index + offset) + 0] = color.x
-        vbo[4 * (index + offset) + 1] = color.y
-        vbo[4 * (index + offset) + 2] = color.z
+		vbo[4 * (index + offset) + 0] = color.x;
+		vbo[4 * (index + offset) + 1] = color.y;
+		vbo[4 * (index + offset) + 2] = color.z;
         vbo[4 * (index + offset) + 3] = 1.0f;
     }
 }
@@ -107,7 +107,7 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
 }
 
 
- __global__ void kernInitializePosArray(int N, glm::vec3 *pos, float scale){
+ __global__ void kernInitializePosArray(int N, glm::vec4 *pos, float scale){
      int index = (blockIdx.x * blockDim.x) + threadIdx.x;
      if (index < N){
          pos[index].x *= scale;
@@ -120,18 +120,18 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
  __global__ void kernInitializePosArrayRotated(int N, glm::vec4 *pos_in, glm::vec4 *pos_out, glm::mat4 transformation){
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (index < N){
-        pos_in[index] = transformation * pos_in[index];
+        pos_out[index] = transformation * pos_in[index];
     }
 }
 
 
-void glm::mat4 constructTransformationMatrix(const glm::vec3 &translation,const glm::vec3& rotation,const glm::vec3& scale){
-    glm::mat4 translation = glm::translate(glm::mat4(), translation);
-    glm::mat4 rotation = glm::rotate(glm::mat4(), rotation.x, glm::vec3(1, 0, 0));
-    rotation *= glm::rotate(glm::mat4(), rotation.y, glm::vec3(0, 1, 0));
-    rotation *= glm::rotate(glm::mat4(), rotation.z, glm::vec3(0, 0, 1));
-    glm::mat4 scale = glm::scale(glm::mat4(), scale);
-    return translation * rotation * scale;
+glm::mat4 constructTransformationMatrix(const glm::vec3 &translation,const glm::vec3& rotation,const glm::vec3& scale){
+    glm::mat4 translation_matrix = glm::translate(glm::mat4(), translation);
+    glm::mat4 rotation_matrix = glm::rotate(glm::mat4(), rotation.x, glm::vec3(1, 0, 0));
+    rotation_matrix *= glm::rotate(glm::mat4(), rotation.y, glm::vec3(0, 1, 0));
+    rotation_matrix *= glm::rotate(glm::mat4(), rotation.z, glm::vec3(0, 0, 1));
+    glm::mat4 scale_matrix = glm::scale(glm::mat4(), scale);
+    return translation_matrix* rotation_matrix * scale_matrix;
 }
 
 /**
