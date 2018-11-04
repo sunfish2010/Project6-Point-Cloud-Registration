@@ -18,7 +18,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <thrust/remove.h>
 #include <thrust/execution_policy.h>
-
+#include <util/svd3_cuda.h>
 
 #ifndef imax
 #define imax(a, b) (((a) > (b)) ? (a) : (b))
@@ -43,21 +43,24 @@ void swap(T &a, T &b) {
 
 static int numObjects;
 
-static glm::vec4 *dev_pos_fixed = NULL;
-static glm::vec4 *dev_pos_rotated = NULL;
+static glm::vec3 *dev_pos_fixed = NULL;
+static glm::vec3 *dev_pos_rotated = NULL;
+static glm::vec3 *dev_pos_corr = NULL;
+static glm::vec3 *dev_pos_rotated_centered = NULL;
+static glm::mat3 *dev_w = NULL;
 
 //static cudaEvent_t start, stop;
 /**
 * Kernel that writes the image to the OpenGL PBO directly.
 */
 /******************
-* copyBoidsToVBO *
+* copyPtsToVBO *
 ******************/
 
 /**
 * Copy the boid positions into the VBO so that they can be drawn by OpenGL.
 */
-__global__ void kernCopyPositionsToVBO(int N, int offset, glm::vec4 *pos, float *vbo) {
+__global__ void kernCopyPositionsToVBO(int N, int offset, glm::vec3 *pos, float *vbo) {
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
 
     float c_scale = -1.0f / scene_scale;
@@ -107,7 +110,7 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
 }
 
 
- __global__ void kernInitializePosArray(int N, glm::vec4 *pos, float scale){
+ __global__ void kernInitializePosArray(int N, glm::vec3 *pos, float scale){
      int index = (blockIdx.x * blockDim.x) + threadIdx.x;
      if (index < N){
          pos[index].x *= scale;
@@ -117,10 +120,10 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
  }
 
 
- __global__ void kernInitializePosArrayRotated(int N, glm::vec4 *pos_in, glm::vec4 *pos_out, glm::mat4 transformation){
+ __global__ void transformPoints(int N, glm::vec3 *pos_in, glm::vec3 *pos_out, glm::mat4 transformation){
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (index < N){
-        pos_out[index] = transformation * pos_in[index];
+        pos_out[index] = glm::vec3(transformation * glm::vec4(pos_in[index], 0.0f));
     }
 }
 
@@ -134,18 +137,26 @@ glm::mat4 constructTransformationMatrix(const glm::vec3 &translation,const glm::
     return translation_matrix* rotation_matrix * scale_matrix;
 }
 
+glm::mat4 constructTranslationMatrix(const glm::vec3 &translation){
+    glm::mat4 translation_matrix = glm::translate(glm::mat4(), translation);
+    return translation_matrix;
+}
+
 /**
 * Called once at the beginning of the program to allocate memory.
 */
-void registrationInit(const std::vector<glm::vec4>& pts) {
+void registrationInit(const std::vector<glm::vec3>& pts) {
     numObjects = (int)pts.size();
     dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
-    cudaMalloc((void**) &dev_pos_fixed, numObjects * sizeof(glm::vec4));
-    cudaMalloc((void**) &dev_pos_rotated, numObjects * sizeof(glm::vec4));
+    cudaMalloc((void**) &dev_pos_fixed, numObjects * sizeof(glm::vec3));
+    cudaMalloc((void**) &dev_pos_rotated, numObjects * sizeof(glm::vec3));
+    cudaMalloc((void**) &dev_pos_corr, numObjects * sizeof(glm::vec3));
+    cudaMalloc((void**) &dev_pos_rotated_centered, numObjects * sizeof(glm::vec3));
+    cudaMalloc((void**) &dev_w, numObjects * sizeof(glm::mat3));
 
     checkCUDAError("registration Init");
 
-	cudaMemcpy(dev_pos_fixed, &pts[0], numObjects * sizeof(glm::vec4), cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_pos_fixed, &pts[0], numObjects * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	checkCUDAError("pos_fixed Memcpy");
 
     kernInitializePosArray <<<fullBlocksPerGrid, blockSize>>> (numObjects, dev_pos_fixed, scene_scale);
@@ -153,7 +164,7 @@ void registrationInit(const std::vector<glm::vec4>& pts) {
     glm::mat4 transformation = constructTransformationMatrix(glm::vec3(5.0f, 0.0f, 0.0f),
             glm::vec3(0.4f, 0.6f, -0.2f), glm::vec3(1.0f, 1.0f, 1.0f));
 
-    kernInitializePosArrayRotated <<<fullBlocksPerGrid, blockSize>>> (numObjects, dev_pos_fixed,
+    transformPoints <<<fullBlocksPerGrid, blockSize>>> (numObjects, dev_pos_fixed,
             dev_pos_rotated, transformation);
 }
 //
@@ -195,11 +206,94 @@ void registrationInit(const std::vector<glm::vec4>& pts) {
 //}
 
 
+__global__ void findNearestNeighborExhaustive(int N, glm::vec3 *source, glm::vec3 *target, glm::vec3 *corr){
+    int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (index < N){
+        glm::vec3 pt = source[index];
+        float d_closest = glm::distance(target[0], pt);
+        int i = 0;
+        for (int j = 1; j < N; j++){
+            float d = glm::distance(target[j], pt));
+            if (d < d_closest){
+                d_closest = d;
+                i = j;
+            }
+        }
+        corr[index] = target[i];
+    }
+}
+
+
+__global__ void translatePts(int N, glm::vec3* pos_in, glm::vec3* pos_out, glm::mat4 translation){
+    int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (index < N){
+        pos_out[index] = glm::vec3(translation * glm::vec4(pos_in[index], 0.f));
+    }
+}
+
+
+__global__ void calculateW(int N, glm::vec3* pos_rotated, glm::vec3* pos_cor, glm::mat3* w){
+    int index = = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (index < N){
+        w[index] = glm::outerProduct(pos_cor[index], pos_rotated[index]);
+//                glm::mat3(pos_cor[index] * pos_rotated[index].x,
+//                            pos_cor[index] * pos_rotated[index].y,
+//                            pos_cor[index] * pos_rotated[index].z);
+    }
+}
+
+
+__global__ void calculateSVDWrapper(glm::mat3* w, glm::mat3* S, glm::mat3* U, glm::mat3 *V){
+    svd(w[0][0], w[0][1], w[0][2], w[1][0], w[1][1], w[1][2], w[2][0], w[2][1], w[2][2],
+        U[0][0], U[0][1], U[0][2], U[1][0], U[1][1], U[1][2], U[2][0], U[2][1], U[2][2],
+        S[0][0], S[0][1], S[0][2], S[1][0], S[1][1], S[1][2], S[2][0], S[2][1], S[2][2],
+        V[0][0], V[0][1], V[0][2], V[1][0], V[1][1], V[1][2], V[2][0], V[2][1], V[2][2]
+    )
+}
+
+
 /**
 * Perform point cloud registration.
 */
-void registration(int method) {
+void registration() {
+    dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
+    findNearestNeighborExhaustive <<<fullBlocksPerGrid, blockSize>>> (numObjects, dev_pos_rotated,
+            dev_pos_fixed, dev_pos_corr);
+    checkCUDAError("Find nearest Neighbor");
 
+    // ICP Algorithm based on http://ais.informatik.uni-freiburg.de/teaching/ss11/robotics/slides/17-icp.pdf
+
+    // calculate mean of two point clouds using stream compaction
+    thrust::device_ptr<glm::vec3> thrust_pos_corr(dev_pos_corr);
+    thrust::device_ptr<glm::vec3> thrust_pos_rotated(dev_pos_rotated);
+
+    glm::vec3 pos_corr_mean = glm::vec3(thrust::reduce(dev_pos_corr, dev_pos_corr + numObjects,
+            glm::vec3(0.f, 0.f, 0.f))) / numObjects;
+    glm::vec3 pos_rotated_mean = glm::vec3(thrust::reduce(dev_pos_rotated,
+            dev_pos_rotated + numObjects, glm::vec3(0.f, 0.f, 0.f))) / numObjects;
+
+    translatePts <<<fullBlocksPerGrid, numObjects>>> (numObjects, dev_pos_corr, dev_pos_corr,
+            constructTranslationMatrix(-pos_corr_mean));
+
+    translatePts <<<fullBlocksPerGrid, numObjects>>> (numObjects, dev_pos_rotated, dev_pos_rotated_centered,
+            constructTranslationMatrix(-pos_rotated_mean));
+    checkCUDAError("Translating Pts");
+
+    calculateW <<< fullBlocksPerGrid, numObjects >>> (numObjects, dev_pos_rotated_centered, dev_pos_corr, dev_w);
+    thrust::device_ptr<glm::mat3> thrust_w(dev_w);
+    glm::mat3 W = thrust::reduce(dev_w, dev_w + numObjects, glm::mat3(0.f));
+    checkCUDAError("Calculated W");
+
+    glm::mat3 S,U,V;
+
+    calculateSVDWrapper <<<1, 1>>>> (W, S, U, V);
+    checkCUDAError("SVD W");
+
+    glm::mat3 R = U * glm::transpose(V);
+    glm::mat3 T = glm::translate(glm::mat4(), pos_corr_mean - R * pos_rotated_mean);
+
+    transformPoints<<< fullBlocksPerGrid, blockSize >>> (numObjects, dev_pos_rotated, dev_pos_rotated, T * R);
+    checkCUDAError("Transforming Pts");
 }
 
 /**
@@ -211,9 +305,15 @@ void registrationFree() {
 
     cudaFree(dev_pos_rotated);
     cudaFree(dev_pos_fixed);
+    cudaFree(dev_pos_rotated_centered);
+    cudaFree(dev_pos_corr);
+    cudaFree(dev_w);
 
     dev_pos_fixed = NULL;
     dev_pos_rotated = NULL;
+    dev_pos_corr = NULL;
+    dev_pos_rotated_centered = NULL;
+    dev_w = NULL;
 
     checkCUDAError("registration Free");
 }

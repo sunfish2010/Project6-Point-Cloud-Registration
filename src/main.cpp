@@ -13,9 +13,8 @@
 // ================
 
 #define VISUALIZE 1
-// 0: brute force, 1: gpu 2: kd-tree 3: oct-tree
-#define METHOD 0
 
+#define FREQ 2 // sample 1 pt from every 2 pts in original
 const float DT = 0.2f;
 
 PointCloud* pointcloud;
@@ -37,7 +36,7 @@ int main(int argc, char* argv[]) {
     string ext = utilityCore::getFilePathExtension(input_filename);
 
     if (ext.compare("txt") == 0) {
-        pointcloud = new PointCloud(input_filename);
+        pointcloud = new PointCloud(input_filename, FREQ);
 		N = pointcloud->getNumPoints();
     } else {
         printf("Non Supported pc Format\n");
@@ -213,7 +212,7 @@ void runCUDA() {
     cudaGLMapBufferObject((void**)&dptrVertVelocities, pointVBO_velocities);
 
     // execute the kernel
-
+    registration();
 
 #if VISUALIZE
     copyPointsToVBO(dptrVertPositions, dptrVertVelocities);

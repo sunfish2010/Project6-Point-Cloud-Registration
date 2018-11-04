@@ -15,12 +15,12 @@ public:
     PointCloud(std::string filename);
 	PointCloud();
 	~PointCloud();
-    std::vector<glm::vec4> getPoints();
+    std::vector<glm::vec3> getPoints();
 	int getNumPoints();
 
 private:
     // x y z color
-    std::vector<glm::vec4> points;
+    std::vector<glm::vec3> points;
 	int numPoints;
 	std::ifstream fp_in;
 };
