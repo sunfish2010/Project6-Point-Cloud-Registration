@@ -126,6 +126,7 @@ bool init(int argc, char **argv) {
     cudaGLRegisterBufferObject(pointVBO_velocities);
 
     // Initialize N-body simulation
+	
     registrationInit(pointcloud->getPoints());
 
     updateCamera();
@@ -281,6 +282,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     leftMousePressed = (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS);
     rightMousePressed = (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS);
+    middleMousePressed = (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS);
 }
 
 void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
@@ -295,6 +297,17 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
         zoom += (ypos - lastY) / height;
         zoom = std::fmax(0.1f, std::fmin(zoom, 5.0f));
         updateCamera();
+    }else if (middleMousePressed){
+        glm::vec3 forward = -glm::normalize(cameraPosition);
+        forward.y = 0.0f;
+        forward = glm::normalize(forward);
+        glm::vec3 right = glm::cross(forward, glm::vec3(0, 1, 0));
+        right.y = 0.0f;
+        right = glm::normalize(right);
+
+        lookAt -= (float) (xpos - lastX) * right * 0.01f;
+        lookAt += (float) (ypos - lastY) * forward * 0.01f;
+        updateCamera();
     }
 
     lastX = xpos;
@@ -306,6 +319,7 @@ void updateCamera() {
     cameraPosition.z = zoom * cos(theta);
     cameraPosition.y = zoom * cos(phi) * sin(theta);
     cameraPosition += lookAt;
+    cout << lookAt.x << ", " << lookAt.y << ", " << lookAt.z << "," << endl;
 
     projection = glm::perspective(fovy, float(width) / float(height), zNear, zFar);
     glm::mat4 view = glm::lookAt(cameraPosition, lookAt, glm::vec3(0, 0, 1));

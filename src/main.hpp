@@ -50,6 +50,7 @@ int pointSize = 2;
 // For camera controls
 bool leftMousePressed = false;
 bool rightMousePressed = false;
+bool middleMousePressed = false;
 double lastX;
 double lastY;
 float theta = 1.22f;

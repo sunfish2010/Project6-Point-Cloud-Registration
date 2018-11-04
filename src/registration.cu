@@ -29,7 +29,7 @@
 #endif
 
 #define blockSize 128
-#define scene_scale 100.0f
+#define scene_scale 1.0f
 #define threadsPerBlock(blockSize)
 
 template<typename T>
@@ -80,9 +80,9 @@ __global__ void kernCopyVelocitiesToVBO(int N, glm::vec3 *vel, float *vbo, float
 //        vbo[4 * index + 1] = vel[index].y + 0.3f;
 //        vbo[4 * index + 2] = vel[index].z + 0.3f;
 //        vbo[4 * index + 3] = 1.0f;
-        vbo[4 * index + 0] = 0.f;
-        vbo[4 * index + 1] = 0.f;
-        vbo[4 * index + 2] = 0.f;
+        vbo[4 * index + 0] = 0.3f;
+        vbo[4 * index + 1] = 0.9f;
+        vbo[4 * index + 2] = 0.3f;
         vbo[4 * index + 3] = 1.0f;
     }
 }
