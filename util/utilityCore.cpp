@@ -73,11 +73,15 @@ glm::mat4 utilityCore::buildTransformationMatrix(glm::vec3 translation, glm::vec
     return translationMat * rotationMat * scaleMat;
 }
 
-std::vector<std::string> utilityCore::tokenizeString(std::string str) {
+std::vector<std::string> utilityCore::tokenizeString(const std::string& str, char sep) {
     std::stringstream strstr(str);
-    std::istream_iterator<std::string> it(strstr);
-    std::istream_iterator<std::string> end;
-    std::vector<std::string> results(it, end);
+    std::string segment;
+    std::vector<std::string> results;
+
+    while(std::getline(strstr, segment, sep))
+    {
+        results.emplace_back(segment);
+    }
     return results;
 }
 

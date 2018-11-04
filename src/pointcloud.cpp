@@ -29,8 +29,8 @@ PointCloud::PointCloud(std::string filename) {
         string line;
         utilityCore::safeGetline(this->fp_in, line);
         if (!line.empty()) {
-            vector<string> tokens = utilityCore::tokenizeString(line);
-            glm::vec4 pt = glm::vec4(atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()),
+			vector<string> tokens = utilityCore::tokenizeString(line, ',');
+            glm::vec4 pt = glm::vec4(atof(tokens[0].c_str()), atof(tokens[1].c_str()), atof(tokens[2].c_str()),
                                 1.0f);
             points.emplace_back(pt);
 

@@ -43,8 +43,8 @@ void swap(T &a, T &b) {
 
 static int numObjects;
 
-static glm::vec3 *dev_pos_fixed = NULL;
-static glm::vec3 *dev_pos_rotated = NULL;
+static glm::vec4 *dev_pos_fixed = NULL;
+static glm::vec4 *dev_pos_rotated = NULL;
 static glm::vec3 *dev_vel2;
 static glm::vec3 *dev_vel1;
 
@@ -59,7 +59,7 @@ static cudaEvent_t start, stop;
 /**
 * Copy the boid positions into the VBO so that they can be drawn by OpenGL.
 */
-__global__ void kernCopyPositionsToVBO(int N, glm::vec3 *pos, float *vbo, float s_scale) {
+__global__ void kernCopyPositionsToVBO(int N, glm::vec4 *pos, float *vbo, float s_scale) {
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
 
     float c_scale = -1.0f / s_scale;
@@ -94,9 +94,10 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
     dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
 
     kernCopyPositionsToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_pos_fixed, vbodptr_positions, scene_scale);
-    kernCopyVelocitiesToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_vel1, vbodptr_velocities, scene_scale);
+	checkCUDAError("copyPositions failed!");
+	kernCopyVelocitiesToVBO << <fullBlocksPerGrid, blockSize >> >(numObjects, dev_vel1, vbodptr_velocities, scene_scale);
 
-    checkCUDAError("copyBoidsToVBO failed!");
+    checkCUDAError("copyVelocities failed!");
 
     cudaDeviceSynchronize();
 }
@@ -117,13 +118,15 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
 void registrationInit(const std::vector<glm::vec4>& pts) {
     numObjects = (int)pts.size();
     dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
-    cudaMalloc((void**) &dev_pos_fixed, numObjects * sizeof(glm::vec3));
-    cudaMalloc((void**) &dev_pos_rotated, numObjects * sizeof(glm::vec3));
+    cudaMalloc((void**) &dev_pos_fixed, numObjects * sizeof(glm::vec4));
+    cudaMalloc((void**) &dev_pos_rotated, numObjects * sizeof(glm::vec4));
     cudaMalloc((void**) &dev_vel1, numObjects * sizeof(glm::vec3));
     cudaMalloc((void**) &dev_vel2, numObjects * sizeof(glm::vec3));
     checkCUDAError("registration Init");
 
-	cudaMemcpy(dev_pos_fixed, &pts[0], pts.size() * sizeof(glm::vec4), cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_pos_fixed, &pts[0], numObjects * sizeof(glm::vec4), cudaMemcpyHostToDevice);
+	checkCUDAError("pos_fixed Memcpy");
+
     //kernInitializePosArray <<<fullBlocksPerGrid, blockSize>>> (pts, numObjects, dev_pos_fixed, scene_scale);
 }
 //

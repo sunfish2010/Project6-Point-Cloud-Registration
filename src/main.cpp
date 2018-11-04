@@ -182,11 +182,11 @@ void initVAO() {
 void initShaders(GLuint * program) {
     GLint location;
 
-    program[PROG_POINT] = glslUtility::createProgram(
-            "shaders/point.vert.glsl",
-            "shaders/point.geom.glsl",
-            "shaders/point.frag.glsl", attributeLocations, 2);
-    glUseProgram(program[PROG_POINT]);
+	program[PROG_POINT] = glslUtility::createProgram(
+		"../shaders/boid.vert.glsl",
+		"../shaders/boid.geom.glsl",
+		"../shaders/boid.frag.glsl", attributeLocations, 2);
+	glUseProgram(program[PROG_POINT]);
 
     if ((location = glGetUniformLocation(program[PROG_POINT], "u_projMatrix")) != -1) {
         glUniformMatrix4fv(location, 1, GL_FALSE, &projection[0][0]);
