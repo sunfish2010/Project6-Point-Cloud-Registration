@@ -18,3 +18,9 @@ glm::mat4 constructTransformationMatrix(const glm::vec3 &translation, const glm:
 void registrationInit(const std:: vector<glm::vec3>& pts);
 void registration();
 void registrationFree();
+
+// cpu stuff
+template <typename T>
+T calculate_vector_mean(std::vector<T> input
+void registration_cpu();
+

@@ -334,3 +334,71 @@ void registrationFree() {
 
 	checkCUDAError("registration Free");
 }
+
+
+template <typename T>
+T calculate_vector_mean(std::vector<T> input){
+	T sum;
+	for (auto &element: input){
+		sum += element;
+	}
+	return sum /= input.size();
+};
+
+
+// skeleton code for cpu_step; no display, just for performance comparison
+void registration_cpu(std::vector<glm::vec3>& target, std::vector<glm::vec3>& source){
+	int numPts = target.size();
+
+	std::vector<glm::vec3> corr(numPts, glm::vec3(0.f, 0.f, 0.f));
+
+	for (int k = 0; k < numPts; k++){
+		auto best_dist = glm::distance(source[k], target[0]);
+		int i = 0;
+		for (int j = 1; j < numPts; j++){
+			auto d = glm::distance(source[k], target[j]);
+			if ( d < best_dist){
+				best_dist = d;
+				i = j;
+			}
+		}
+		corr[k] = target[j];
+	}
+
+
+	glm::vec3 mean_corr = calculate_vector_mean(corr);
+	glm::vec3 mean_source = calculate_vector_mean(source);
+
+	std::vector<glm::vec3> source_centered = source.copy();
+
+	for (int i = 0; i < numPts; i++){
+		source_centered[i] = source[i] - mean_source;
+		corr[i] -= mean_corr;
+	}
+
+	// calculate w
+	std::vector<glm::mat3> w (numPts, glm::vec3(0.f, 0.f, 0.f));
+	for (int i = 0; i < numPts; i++){
+		w[i] = glm::outerProduct(source_centered[i], corr[i]);
+	}
+
+	glm::mat3 W = calculate_vector_mean(w);
+	W *= numPts;
+
+	glm::mat3 S, U, V;
+
+	svd(W[0][0], W[0][1], W[0][2], W[1][0], W[1][1], W[1][2], W[2][0], W[2][1], W[2][2],
+		U[0][0], U[0][1], U[0][2], U[1][0], U[1][1], U[1][2], U[2][0], U[2][1], U[2][2],
+		S[0][0], S[0][1], S[0][2], S[1][0], S[1][1], S[1][2], S[2][0], S[2][1], S[2][2],
+		V[0][0], V[0][1], V[0][2], V[1][0], V[1][1], V[1][2], V[2][0], V[2][1], V[2][2]);
+
+	glm::mat3 R = glm::transpose(U) * V;
+	glm::vec3 t = pos_corr_mean - R * pos_rotated_mean;
+	glm::mat4 T = glm::translate(glm::mat4(), t);
+	glm::mat4 transformation = T * glm::mat4(R);
+
+	for (int i = 0; i < numPts; i++){
+		source[i] = glm::vec3(transformation * glm::vec4(source[i], 1.0f));
+	}
+
+}
