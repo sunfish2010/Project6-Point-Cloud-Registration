@@ -22,7 +22,7 @@
 #define _gamma 5.828427124 // FOUR_GAMMA_SQUARED = sqrt(8)+3;
 #define _cstar 0.923879532 // cos(pi/8)
 #define _sstar 0.3826834323 // sin(p/8)
-#define EPSILON 1e-6
+#define EPSI 1e-9
 
 #include <math.h>
 
@@ -32,7 +32,7 @@ http://www.lomont.org/Math/Papers/2003/InvSqrt.pdf
 http://playstation2-linux.com/download/p2lsd/fastrsqrt.pdf
 http://www.beyond3d.com/content/articles/8/
 */
-inline float rsqrt(float x) {
+inline float rsqrt_novel(float x) {
 // int ihalf = *(int *)&x - 0x00800000; // Alternative to next line,
 // float xhalf = *(float *)&ihalf;      // for sufficiently large nos.
     float xhalf = 0.5f*x;
@@ -274,7 +274,7 @@ void QRGivensQuaternion(float a1, float a2, float &ch, float &sh)
 {
     // a1 = pivot point on diagonal
     // a2 = lower triangular entry we want to annihilate
-    float epsilon = (float)EPSILON;
+    float epsilon = (float)EPSI;
     float rho = accurateSqrt(a1*a1 + a2*a2);
 
     sh = rho > epsilon ? a2 : 0;

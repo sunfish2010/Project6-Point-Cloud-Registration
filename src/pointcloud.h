@@ -12,7 +12,7 @@
 
 class PointCloud{
 public:
-    PointCloud(std::string filename);
+    PointCloud(std::string filename, int freq);
 	PointCloud();
 	~PointCloud();
     std::vector<glm::vec3> getPoints();

@@ -25,19 +25,17 @@ PointCloud::PointCloud(std::string filename, int freq) {
         cout << "Error reading from file - aborting!" << endl;
         throw;
     }
-
+	int count = 0;
     while (this->fp_in.good()) {
         string line;
-        int count = 0;
-
+      
         utilityCore::safeGetline(this->fp_in, line);
         if (!line.empty()) {
             ++count;
             if (count > freq) count = 1;
             if (count == 1){
                 vector<string> tokens = utilityCore::tokenizeString(line, ',');
-                glm::vec3 pt = glm::vec3(atof(tokens[0].c_str()), atof(tokens[1].c_str()), atof(tokens[2].c_str()),
-                                         1.0f);
+                glm::vec3 pt = glm::vec3(atof(tokens[0].c_str()), atof(tokens[1].c_str()), atof(tokens[2].c_str()));
                 points.emplace_back(pt);
             }
         }

@@ -14,7 +14,7 @@
 
 #define VISUALIZE 1
 
-#define FREQ 2 // sample 1 pt from every 2 pts in original
+#define FREQ 4 // sample 1 pt from every 2 pts in original
 const float DT = 0.2f;
 
 PointCloud* pointcloud;

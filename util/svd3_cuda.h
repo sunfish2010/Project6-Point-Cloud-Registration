@@ -21,7 +21,7 @@
 #define _gamma 5.828427124 // FOUR_GAMMA_SQUARED = sqrt(8)+3;
 #define _cstar 0.923879532 // cos(pi/8)
 #define _sstar 0.3826834323 // sin(p/8)
-#define EPSILON 1e-6
+#define EPSI 1e-6
 
 #include <cuda.h>
 #include "math.h" // CUDA math library
@@ -251,7 +251,7 @@ void QRGivensQuaternion(float a1, float a2, float &ch, float &sh)
 {
     // a1 = pivot point on diagonal
     // a2 = lower triangular entry we want to annihilate
-    float epsilon = EPSILON;
+    float epsilon = EPSI;
     float rho = accurateSqrt(a1*a1 + a2*a2);
 
     sh = rho > epsilon ? a2 : 0;
