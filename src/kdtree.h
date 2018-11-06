@@ -20,8 +20,8 @@ public :
     int axis;
 
     Node();
-    Node(glm::vec3 &value, int axis);
-    Node(const glm::vec3 &value, const NodePtr left, const NodePtr right);
+	Node(const glm::vec3 &value, int axis);
+    Node(const glm::vec3 &value, int left, int right);
     ~Node()= default;
     //int getAxis();
 
@@ -36,25 +36,15 @@ public:
     KDTree()= default;
     ~KDTree()= default;
     KDTree(std::vector<glm::vec3> pts);
-    std::vector<Node> getTree() const { return tree};
+	std::vector<Node> getTree()const { return tree; }
 
 private:
     using ptsIter = std::vector<glm::vec3>::iterator;
-    NodePtr make_tree(const ptsIter &begin, const ptsIter &end, int axis);
+    void make_tree(ptsIter &begin, ptsIter &end, int axis, int length, std::vector<Node>& tree, int index);
     std::vector<Node> tree;
 };
 
 
-bool sortX(const glm::vec3 &pt1, glm::vec3& pt2){
-    return pt1.x < pt2.x;
-}
-
-
-bool sortY(const glm::vec3 &pt1, glm::vec3& pt2){
-    return pt1.y < pt2.y;
-}
-
-
-bool sortZ(const glm::vec3 &pt1, glm::vec3& pt2){
-    return pt1.y < pt2.y;
-}
+bool sortDimx(const glm::vec3 &pt1, glm::vec3& pt2);
+bool sortDimy(const glm::vec3 &pt1, glm::vec3& pt2);
+bool sortDimz(const glm::vec3 &pt1, glm::vec3& pt2);

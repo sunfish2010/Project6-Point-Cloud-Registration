@@ -23,5 +23,5 @@ void registrationFree();
 template <typename T>
 T calculate_vector_mean(std::vector<T> input);
 std::vector<glm::vec3> registration_init_cpu(std::vector<glm::vec3> &input);
-void registration_cpu();
+void registration_cpu(std::vector<glm::vec3>& target, std::vector<glm::vec3>& source);
 

@@ -152,7 +152,7 @@ glm::mat4 constructTranslationMatrix(const glm::vec3 &translation) {
 /**
 * Called once at the beginning of the program to allocate memory.
 */
-void registrationInitGPU(const std::vector<glm::vec3>& pts) {
+void registrationInit(const std::vector<glm::vec3>& pts) {
 	numObjects = (int)pts.size();
 	dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
 	cudaMalloc((void**)&dev_pos_fixed, numObjects * sizeof(glm::vec3));
@@ -168,8 +168,8 @@ void registrationInitGPU(const std::vector<glm::vec3>& pts) {
 
 #if KDTREE
 	cudaMalloc((void**)&dev_kd, numObjects * sizeof(Node));
-	KDTree(pts);
-	std::vector<Node> tree = pts.getTree();
+	KDTree kdtree(pts);
+	std::vector<Node> tree = kdtree.getTree();
 	cudaMemcpy(dev_kd, &tree[0], numObjects * sizeof(Node), cudaMemcpyHostToDevice);
 #endif
 
@@ -210,12 +210,12 @@ __device__ float calculateHyperPlaneDist(const glm::vec3& pt1, const glm::vec3& 
 
 __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const Node *tree, glm::vec3 *corr){
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
-	if(index < N{
+	if(index < N){
 		glm::vec3 pt = source[index];
 		float d_closest = glm::distance(tree[0].data, pt);
 		bool explored = false;
 		float hyper_dist = calculateHyperPlaneDist(pt, tree[0].data, tree[0].axis);
-		int curr_node = hyper_dist < 0 ? tree[0].left, tree[0].right;
+		int curr_node = hyper_dist < 0 ? tree[0].left: tree[0].right;
 		int closest_node = 0;
 		while(1){
 			// explore current node & below
@@ -226,7 +226,7 @@ __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const 
 					closest_node = curr_node;
 				}
 				hyper_dist = calculateHyperPlaneDist(pt, tree[curr_node].data, tree[curr_node].axis);
-				curr_node = hyper_dist < 0 ? tree[curr_node].left, tree[curr_node].right;
+				curr_node = hyper_dist < 0 ? tree[curr_node].left :tree[curr_node].right;
 
 			}
 			if(explored) break;
@@ -235,7 +235,7 @@ __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const 
 				if (parent == -1) break;
 				hyper_dist = calculateHyperPlaneDist(pt, tree[parent].data, tree[parent].axis);
 				if (abs(hyper_dist) < d_closest){
-					curr_node = hyper_dist < 0 ? tree[parent].eft, tree[parent].right;
+					curr_node = hyper_dist < 0 ? tree[parent].left: tree[parent].right;
 				}else break;
 			}
 
@@ -351,7 +351,7 @@ void registrationFree() {
 	cudaFree(dev_pos_rotated_centered);
 	cudaFree(dev_pos_corr);
 	cudaFree(dev_w);
-	cudaFrree(dev_kd);
+	cudaFree(dev_kd);
 
 	dev_pos_fixed = NULL;
 	dev_pos_rotated = NULL;
