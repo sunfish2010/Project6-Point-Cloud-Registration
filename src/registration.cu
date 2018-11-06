@@ -346,6 +346,16 @@ T calculate_vector_mean(std::vector<T> input){
 };
 
 
+std::vector<glm::vec3> registration_init_cpu(std::vector<glm::vec3> &input){
+    glm::mat4 transformation = constructTransformationMatrix(glm::vec3(1.0f, 0.0f, 0.0f),
+        glm::vec3(0.4f, 0.4f, -0.2f), glm::vec3(1.0f, 1.0f, 1.0f));
+    std::vector<glm::vec3>result(input.size(), glm::vec3(0.f, 0.f, 0.f));
+    for (int i = 0; i < input.size(); ++i){
+        result[i] = glm::vec3(transformation * glm::vec4(input[i], 1.0f));
+    }
+	return result;
+}
+
 // skeleton code for cpu_step; no display, just for performance comparison
 void registration_cpu(std::vector<glm::vec3>& target, std::vector<glm::vec3>& source){
 	int numPts = target.size();
@@ -362,14 +372,14 @@ void registration_cpu(std::vector<glm::vec3>& target, std::vector<glm::vec3>& so
 				i = j;
 			}
 		}
-		corr[k] = target[j];
+		corr[k] = target[i];
 	}
 
 
 	glm::vec3 mean_corr = calculate_vector_mean(corr);
 	glm::vec3 mean_source = calculate_vector_mean(source);
 
-	std::vector<glm::vec3> source_centered = source.copy();
+	std::vector<glm::vec3> source_centered = source;
 
 	for (int i = 0; i < numPts; i++){
 		source_centered[i] = source[i] - mean_source;
@@ -377,7 +387,7 @@ void registration_cpu(std::vector<glm::vec3>& target, std::vector<glm::vec3>& so
 	}
 
 	// calculate w
-	std::vector<glm::mat3> w (numPts, glm::vec3(0.f, 0.f, 0.f));
+	std::vector<glm::mat3> w(numPts, glm::mat3(glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f)));
 	for (int i = 0; i < numPts; i++){
 		w[i] = glm::outerProduct(source_centered[i], corr[i]);
 	}
@@ -393,7 +403,7 @@ void registration_cpu(std::vector<glm::vec3>& target, std::vector<glm::vec3>& so
 		V[0][0], V[0][1], V[0][2], V[1][0], V[1][1], V[1][2], V[2][0], V[2][1], V[2][2]);
 
 	glm::mat3 R = glm::transpose(U) * V;
-	glm::vec3 t = pos_corr_mean - R * pos_rotated_mean;
+	glm::vec3 t = mean_corr - R * mean_source;
 	glm::mat4 T = glm::translate(glm::mat4(), t);
 	glm::mat4 transformation = T * glm::mat4(R);
 
