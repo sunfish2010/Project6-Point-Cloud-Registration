@@ -8,15 +8,16 @@ Node::Node(const glm::vec3 &value, int axis):left(-1), right(-1), parent(-1), da
 Node::Node(const glm::vec3 &value, int left,
         int right):left(left), right(right), parent(-1), data(value), axis(0) {}
 
-KDTree::KDTree(std::vector <glm::vec3> pts) {
+KDTree::KDTree(std::vector <glm::vec3>& pts, float scale) {
     //std::sort(pts.begin(), pts.end(), sortX());
     this->tree = std::vector<Node>(pts.size(), Node());
-    make_tree(pts.begin(), pts.end(), 0, pts.size(), tree, 0);
+    this->scale = scale;
+    make_tree(pts.begin(), pts.end(), 0, pts.size(),  0);
 
 }
 
 
-void KDTree::make_tree(ptsIter &begin, ptsIter &end, int axis, int length, std::vector<Node>& tree, int index) {
+void KDTree::make_tree(ptsIter &begin, ptsIter &end, int axis, int length, int index) {
     // just edge case checking, will it happen?
     if (begin == end) return;
 
@@ -32,19 +33,19 @@ void KDTree::make_tree(ptsIter &begin, ptsIter &end, int axis, int length, std::
     int llen = length / 2;
     int rlen = length - llen - 1;
 
-    tree[index] = Node(*mid, axis);
+	tree[index] = Node((*mid) * scale, axis);
 
 	int leftNode, rightNode;
 
     if (llen > 0 && begin != mid){
 		leftNode = index + 1;
-		make_tree(begin, mid, (axis + 1) % 3, llen, tree, index + 1);
+		make_tree(begin, mid, (axis + 1) % 3, llen, index + 1);
     }else{
         leftNode = -1;
     }
     if (rlen > 0 && mid+1 != end){
 		rightNode = index + (length / 2) + 1;
-		make_tree(mid + 1, end, (axis + 1) % 3, rlen, tree, index + (length / 2) + 1);
+		make_tree(mid + 1, end, (axis + 1) % 3, rlen,  index + (length / 2) + 1);
     }else{
         rightNode = -1;
     }
@@ -66,5 +67,5 @@ bool sortDimy(const glm::vec3 &pt1, glm::vec3& pt2) {
 
 
 bool sortDimz(const glm::vec3 &pt1, glm::vec3& pt2) {
-	return pt1.y < pt2.y;
+	return pt1.z < pt2.z;
 }

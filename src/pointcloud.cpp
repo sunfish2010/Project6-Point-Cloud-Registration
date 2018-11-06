@@ -16,7 +16,7 @@ PointCloud::~PointCloud() {
 	this->numPoints = 0;
 }
 
-PointCloud::PointCloud(std::string filename, int freq) {
+PointCloud::PointCloud(std::string filename, int freq, char sep) {
     cout << "Reading Point Cloud From " << filename << "..." << endl;
     char* fname = (char*)filename.c_str();
     this->fp_in.open(fname);
@@ -34,7 +34,7 @@ PointCloud::PointCloud(std::string filename, int freq) {
             ++count;
             if (count > freq) count = 1;
             if (count == 1){
-                vector<string> tokens = utilityCore::tokenizeString(line, ',');
+                vector<string> tokens = utilityCore::tokenizeString(line, sep);
                 glm::vec3 pt = glm::vec3(atof(tokens[0].c_str()), atof(tokens[1].c_str()), atof(tokens[2].c_str()));
                 points.emplace_back(pt);
             }

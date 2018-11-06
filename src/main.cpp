@@ -14,7 +14,8 @@
 
 #define VISUALIZE 1
 
-#define FREQ 4 // sample 1 pt from every 2 pts in original
+#define FREQ 1 // sample 1 pt from every FREQ pts in original
+#define SEP ','
 const float DT = 0.2f;
 
 PointCloud* pointcloud;
@@ -36,7 +37,7 @@ int main(int argc, char* argv[]) {
     string ext = utilityCore::getFilePathExtension(input_filename);
 
     if (ext.compare("txt") == 0) {
-        pointcloud = new PointCloud(input_filename, FREQ);
+        pointcloud = new PointCloud(input_filename, FREQ, SEP);
 		N = pointcloud->getNumPoints();
     } else {
         printf("Non Supported pc Format\n");
@@ -213,7 +214,7 @@ void runCUDA() {
 
     // execute the kernel
     registration();
-
+	//registration_cpu(pointcloud->getPoints(), pointcloud->getPoints());
 #if VISUALIZE
     copyPointsToVBO(dptrVertPositions, dptrVertVelocities);
 #endif
@@ -245,7 +246,7 @@ void mainLoop() {
         ss << "[";
         ss.precision(1);
         ss << std::fixed << fps;
-        ss << " fps] " << deviceName;
+        ss << " fps]  N: " << N;
         glfwSetWindowTitle(window, ss.str().c_str());
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

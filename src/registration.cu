@@ -31,7 +31,7 @@
 #define imin(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-#define EXHAUSTIVE 1
+#define EXHAUSTIVE 0
 #define KDTREE 1
 
 #define blockSize 128
@@ -120,9 +120,9 @@ void copyPointsToVBO(float *vbodptr_positions, float *vbodptr_velocities) {
 __global__ void kernInitializePosArray(int N, glm::vec3 *pos, float scale) {
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 	if (index < N) {
-		pos[index].x *= scale;
-		pos[index].y *= scale;
-		pos[index].z *= scale;
+		pos[index].x *= scale * 10;
+		pos[index].y *= scale  * 10 ;
+		pos[index].z *= scale * 10;
 	}
 }
 
@@ -152,7 +152,7 @@ glm::mat4 constructTranslationMatrix(const glm::vec3 &translation) {
 /**
 * Called once at the beginning of the program to allocate memory.
 */
-void registrationInit(const std::vector<glm::vec3>& pts) {
+void registrationInit(std::vector<glm::vec3>& pts) {
 	numObjects = (int)pts.size();
 	dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
 	cudaMalloc((void**)&dev_pos_fixed, numObjects * sizeof(glm::vec3));
@@ -168,15 +168,15 @@ void registrationInit(const std::vector<glm::vec3>& pts) {
 
 #if KDTREE
 	cudaMalloc((void**)&dev_kd, numObjects * sizeof(Node));
-	KDTree kdtree(pts);
+	KDTree kdtree(pts, scene_scale);
 	std::vector<Node> tree = kdtree.getTree();
 	cudaMemcpy(dev_kd, &tree[0], numObjects * sizeof(Node), cudaMemcpyHostToDevice);
 #endif
 
 	kernInitializePosArray << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos_fixed, scene_scale);
 
-	glm::mat4 transformation = constructTransformationMatrix(glm::vec3(1.0f, 0.0f, 0.0f),
-		glm::vec3(0.4f, 0.4f, -0.2f), glm::vec3(1.0f, 1.0f, 1.0f));
+	glm::mat4 transformation = constructTransformationMatrix(glm::vec3(5.0f, 2.0f, 10.0f),
+		glm::vec3(0.3f, -0.2f, 0.5f), glm::vec3(1.0f, 1.0f, 1.0f));
 
 	transformPoints << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos_fixed,
 		dev_pos_rotated, transformation);
@@ -201,10 +201,15 @@ __global__ void findNearestNeighborExhaustive(int N, const glm::vec3 *source, co
 }
 
 
-__device__ float calculateHyperPlaneDist(const glm::vec3& pt1, const glm::vec3& pt2, int axis){
-	if (axis == 0) return pt1.x - pt2.x;
-	else if (axis == 1) return pt1.y - pt2.y;
-	else return pt1.z - pt2.z;
+__device__ float calculateHyperPlaneDist(const glm::vec3* pt1, const glm::vec3* pt2, int axis){
+	if (axis == 0) {
+		return pt1->x - pt2->x; 
+	}
+	else if (axis == 1) {
+		return pt1->y - pt2->y;
+	}
+	else 
+		return pt1->z - pt2->z;
 }
 
 
@@ -214,10 +219,12 @@ __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const 
 		glm::vec3 pt = source[index];
 		float d_closest = glm::distance(tree[0].data, pt);
 		bool explored = false;
-		float hyper_dist = calculateHyperPlaneDist(pt, tree[0].data, tree[0].axis);
+		float hyper_dist = calculateHyperPlaneDist(&pt, &(tree[0].data), tree[0].axis);
 		int curr_node = hyper_dist < 0 ? tree[0].left: tree[0].right;
 		int closest_node = 0;
-		while(1){
+		bool done = false;
+		//std::cout << "Closest distance is " << d_closest << ",  source" << pt << ", closest_pt" << tree[closest_node].data << std::endl;
+		while(!done){
 			// explore current node & below
 			while(curr_node != -1){
 				float d = glm::distance(tree[curr_node].data, pt);
@@ -225,23 +232,42 @@ __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const 
 					d_closest = d;
 					closest_node = curr_node;
 				}
-				hyper_dist = calculateHyperPlaneDist(pt, tree[curr_node].data, tree[curr_node].axis);
+				hyper_dist = calculateHyperPlaneDist(&pt, &(tree[curr_node].data), tree[curr_node].axis);
+				/*if (index == 0) {
+					printf("1. Closest distance is  %f, source: %f, %f, %f,  curr_node :  %f, %f, %f , axis: %d \n", d_closest, pt.x, pt.y, pt.z,
+					tree[curr_node].data.x, tree[curr_node].data.y, tree[curr_node].data.z, tree[curr_node].axis);
+
+				}*/
 				curr_node = hyper_dist < 0 ? tree[curr_node].left :tree[curr_node].right;
 
 			}
-			if(explored) break;
+			if (explored || tree[closest_node].parent == -1) {
+				done = true;
+			}
 			else{
 				int parent = tree[closest_node].parent;
-				if (parent == -1) break;
-				hyper_dist = calculateHyperPlaneDist(pt, tree[parent].data, tree[parent].axis);
+				hyper_dist = calculateHyperPlaneDist(&pt, &(tree[parent].data), tree[parent].axis);
+				/*if (index == 0) {
+					printf("2. Closest distance is  %f, source: %f, %f, %f,  curr_node :  %f, %f, %f , axis: %d \n", d_closest, pt.x, pt.y, pt.z,
+						tree[parent].data.x, tree[parent].data.y, tree[parent].data.z, tree[parent].axis);
+
+				}*/
 				if (abs(hyper_dist) < d_closest){
 					curr_node = hyper_dist < 0 ? tree[parent].left: tree[parent].right;
-				}else break;
+					explored = true;
+				}
+				else {
+					done = true;
+				}
 			}
-
-
 		}
+		if (index == 0) {
+			printf("3. Closest distance is  %f, source: %f, %f, %f,  closest pt :  %f, %f, %f  \n", d_closest, pt.x, pt.y, pt.z,
+				tree[closest_node].data.x, tree[closest_node].data.y, tree[closest_node].data.z);
+		}
+		
 		corr[index] = tree[closest_node].data;
+		
 	}
 }
 

@@ -35,13 +35,14 @@ class KDTree{
 public:
     KDTree()= default;
     ~KDTree()= default;
-    KDTree(std::vector<glm::vec3> pts);
+    KDTree(std::vector <glm::vec3>& pts,float scale);
 	std::vector<Node> getTree()const { return tree; }
 
 private:
     using ptsIter = std::vector<glm::vec3>::iterator;
-    void make_tree(ptsIter &begin, ptsIter &end, int axis, int length, std::vector<Node>& tree, int index);
+    void make_tree(ptsIter &begin, ptsIter &end, int axis, int length, int index);
     std::vector<Node> tree;
+    float scale;
 };
 
 
