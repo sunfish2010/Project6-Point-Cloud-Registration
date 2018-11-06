@@ -14,6 +14,7 @@
 #include <util/checkCUDAError.h>
 #include "registrationTools.h"
 #include "registration.h"
+#include "kdtree.h"
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <thrust/reduce.h>
@@ -29,6 +30,9 @@
 #ifndef imin
 #define imin(a, b) (((a) < (b)) ? (a) : (b))
 #endif
+
+#define EXHAUSTIVE 1
+#define KDTREE 1
 
 #define blockSize 128
 #define scene_scale 100.0f
@@ -50,6 +54,7 @@ static glm::vec3 *dev_pos_rotated = NULL;
 static glm::vec3 *dev_pos_corr = NULL;
 static glm::vec3 *dev_pos_rotated_centered = NULL;
 static glm::mat3 *dev_w = NULL;
+static Node *dev_kd = NULL;
 
 //static cudaEvent_t start, stop;
 /**
@@ -147,7 +152,7 @@ glm::mat4 constructTranslationMatrix(const glm::vec3 &translation) {
 /**
 * Called once at the beginning of the program to allocate memory.
 */
-void registrationInit(const std::vector<glm::vec3>& pts) {
+void registrationInitGPU(const std::vector<glm::vec3>& pts) {
 	numObjects = (int)pts.size();
 	dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
 	cudaMalloc((void**)&dev_pos_fixed, numObjects * sizeof(glm::vec3));
@@ -161,6 +166,13 @@ void registrationInit(const std::vector<glm::vec3>& pts) {
 	cudaMemcpy(dev_pos_fixed, &pts[0], numObjects * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	checkCUDAError("pos_fixed Memcpy");
 
+#if KDTREE
+	cudaMalloc((void**)&dev_kd, numObjects * sizeof(Node));
+	KDTree(pts);
+	std::vector<Node> tree = pts.getTree();
+	cudaMemcpy(dev_kd, &tree[0], numObjects * sizeof(Node), cudaMemcpyHostToDevice);
+#endif
+
 	kernInitializePosArray << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos_fixed, scene_scale);
 
 	glm::mat4 transformation = constructTransformationMatrix(glm::vec3(1.0f, 0.0f, 0.0f),
@@ -169,46 +181,9 @@ void registrationInit(const std::vector<glm::vec3>& pts) {
 	transformPoints << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos_fixed,
 		dev_pos_rotated, transformation);
 }
-//
-///**
-//* kern function with support for stride to sometimes replace cudaMemcpy
-//* One thread is responsible for copying one component
-//*/
-//__global__
-//void _deviceBufferCopy(int N, BufferByte *dev_dst, const BufferByte *dev_src, int n, int byteStride, int byteOffset,
-//                       int componentTypeByteSize) {
-//
-//    // Attribute (vec3 position)
-//    // component (3 * float)
-//    // byte (4 * byte)
-//
-//    // id of component
-//    int i = (blockIdx.x * blockDim.x) + threadIdx.x;
-//
-//    if (i < N) {
-//        int count = i / n;
-//        int offset = i - count * n;    // which component of the attribute
-//
-//        for (int j = 0; j < componentTypeByteSize; j++) {
-//
-//            dev_dst[count * componentTypeByteSize * n
-//                    + offset * componentTypeByteSize
-//                    + j]
-//
-//                    =
-//
-//                    dev_src[byteOffset
-//                            + count * (byteStride == 0 ? componentTypeByteSize * n : byteStride)
-//                            + offset * componentTypeByteSize
-//                            + j];
-//        }
-//    }
-//
-//
-//}
 
 
-__global__ void findNearestNeighborExhaustive(int N, glm::vec3 *source, glm::vec3 *target, glm::vec3 *corr) {
+__global__ void findNearestNeighborExhaustive(int N, const glm::vec3 *source, const glm::vec3 *target, glm::vec3 *corr) {
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 	if (index < N) {
 		glm::vec3 pt = source[index];
@@ -222,6 +197,51 @@ __global__ void findNearestNeighborExhaustive(int N, glm::vec3 *source, glm::vec
 			}
 		}
 		corr[index] = target[i];
+	}
+}
+
+
+__device__ float calculateHyperPlaneDist(const glm::vec3& pt1, const glm::vec3& pt2, int axis){
+	if (axis == 0) return pt1.x - pt2.x;
+	else if (axis == 1) return pt1.y - pt2.y;
+	else return pt1.z - pt2.z;
+}
+
+
+__global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const Node *tree, glm::vec3 *corr){
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if(index < N{
+		glm::vec3 pt = source[index];
+		float d_closest = glm::distance(tree[0].data, pt);
+		bool explored = false;
+		float hyper_dist = calculateHyperPlaneDist(pt, tree[0].data, tree[0].axis);
+		int curr_node = hyper_dist < 0 ? tree[0].left, tree[0].right;
+		int closest_node = 0;
+		while(1){
+			// explore current node & below
+			while(curr_node != -1){
+				float d = glm::distance(tree[curr_node].data, pt);
+				if (d < d_closest){
+					d_closest = d;
+					closest_node = curr_node;
+				}
+				hyper_dist = calculateHyperPlaneDist(pt, tree[curr_node].data, tree[curr_node].axis);
+				curr_node = hyper_dist < 0 ? tree[curr_node].left, tree[curr_node].right;
+
+			}
+			if(explored) break;
+			else{
+				int parent = tree[closest_node].parent;
+				if (parent == -1) break;
+				hyper_dist = calculateHyperPlaneDist(pt, tree[parent].data, tree[parent].axis);
+				if (abs(hyper_dist) < d_closest){
+					curr_node = hyper_dist < 0 ? tree[parent].eft, tree[parent].right;
+				}else break;
+			}
+
+
+		}
+		corr[index] = tree[closest_node].data;
 	}
 }
 
@@ -259,8 +279,14 @@ __global__ void calculateW(int N, glm::vec3* pos_rotated, glm::vec3* pos_cor, gl
 */
 void registration() {
 	dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
+#if EXHAUSTIVE
 	findNearestNeighborExhaustive << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos_rotated,
 		dev_pos_fixed, dev_pos_corr);
+#elif KDTREE
+	findNearestNeighborKDTree << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos_rotated,
+		dev_kd , dev_pos_corr);
+#endif
+
 	checkCUDAError("Find nearest Neighbor");
 
 	// ICP Algorithm based on http://ais.informatik.uni-freiburg.de/teaching/ss11/robotics/slides/17-icp.pdf
@@ -325,6 +351,7 @@ void registrationFree() {
 	cudaFree(dev_pos_rotated_centered);
 	cudaFree(dev_pos_corr);
 	cudaFree(dev_w);
+	cudaFrree(dev_kd);
 
 	dev_pos_fixed = NULL;
 	dev_pos_rotated = NULL;
