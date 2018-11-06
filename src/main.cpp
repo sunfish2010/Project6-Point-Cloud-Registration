@@ -15,7 +15,7 @@
 #define VISUALIZE 1
 
 #define FREQ 1 // sample 1 pt from every FREQ pts in original
-#define SEP ','
+#define SEP ' '
 const float DT = 0.2f;
 
 PointCloud* pointcloud;

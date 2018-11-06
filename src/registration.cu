@@ -231,6 +231,7 @@ __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const 
 				if (d < d_closest){
 					d_closest = d;
 					closest_node = curr_node;
+                    explored = false;
 				}
 				hyper_dist = calculateHyperPlaneDist(&pt, &(tree[curr_node].data), tree[curr_node].axis);
 				/*if (index == 0) {
@@ -262,8 +263,8 @@ __global__ void findNearestNeighborKDTree(int N, const glm::vec3 *source, const 
 			}
 		}
 		if (index == 0) {
-			printf("3. Closest distance is  %f, source: %f, %f, %f,  closest pt :  %f, %f, %f  \n", d_closest, pt.x, pt.y, pt.z,
-				tree[closest_node].data.x, tree[closest_node].data.y, tree[closest_node].data.z);
+			/*printf("3. Closest distance is  %f, source: %f, %f, %f,  closest pt :  %f, %f, %f  \n", d_closest, pt.x, pt.y, pt.z,
+				tree[closest_node].data.x, tree[closest_node].data.y, tree[closest_node].data.z);*/
 		}
 		
 		corr[index] = tree[closest_node].data;
