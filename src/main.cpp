@@ -12,7 +12,7 @@
 // Configuration
 // ================
 
-#define VISUALIZE 1
+#define VISUALIZE 0
 
 #define FREQ 1 // sample 1 pt from every FREQ pts in original
 #define SEP ' '
