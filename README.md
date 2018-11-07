@@ -7,7 +7,7 @@ Point Cloud Registration with CUDA to Substitute Original Vulkan Project
 * [LinkedIn](https://www.linkedin.com/in/yusun3/)
 * Tested on: Windows 10 , i7-6700HQ CPU @ 2.60GHz × 8 , GeForce GTX 960M/PCIe/SSE2, 7.7GB Memory (Personal Laptop)
 
-### 
+## Introduction
 
 Below is a demo run of the registration of point cloud. The source point cloud was shifted certain distance and rotated certain angle away from the original point cloud. The algorithm was able to register these two point clouds together. 
 ![](images/demo.gif)
@@ -21,7 +21,7 @@ The main algorithm behind the registration is Iterative Closest Point (ICP), whi
 
 With fixed algorithm, I compared the performance using three different methods to see how much speed up we can get by leveraging the use of GPU. I implemented an exhaustive search version with cpu, a version exhaustive search version with GPU, and a KDTree based search with GPU. The performance analysis can be seen below.
 
-## Performance Analysis (Number of Bloids)
+## Performance Analysis (Number of Points)
 Here are how these three approach perform for scenes with different number of pts. To show this more explicitly, the exact numbers are also shown.
 
 Graph    | Exact Number
