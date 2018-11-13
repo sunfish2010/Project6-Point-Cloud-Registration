@@ -67,5 +67,5 @@ bool sortDimy(const glm::vec3 &pt1, glm::vec3& pt2) {
 
 
 bool sortDimz(const glm::vec3 &pt1, glm::vec3& pt2) {
-	return pt1.y < pt2.y;
+	return pt1.z < pt2.z;
 }
